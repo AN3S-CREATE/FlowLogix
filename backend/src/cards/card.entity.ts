@@ -39,13 +39,13 @@ export class Card {
   dueDate: Date | null;
 
   @Column({ name: 'is_complete', type: 'boolean', default: false })
-  isComplete: boolean;
+  isComplete: boolean = false;
 
   @Column({ name: 'is_archived', type: 'boolean', default: false })
-  isArchived: boolean;
+  isArchived: boolean = false;
 
   @Column({ name: 'custom_fields', type: 'jsonb', default: {} })
-  customFields: Record<string, unknown>;
+  customFields: Record<string, unknown> = {};
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;

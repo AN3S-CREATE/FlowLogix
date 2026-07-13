@@ -13,8 +13,13 @@ export class CardMembersService {
     private readonly tenantAccess: TenantAccessService,
   ) {}
 
-  async create(cardId: string, orgId: string, dto: CreateCardMemberDto): Promise<CardMember> {
+  async create(
+    cardId: string,
+    orgId: string,
+    dto: CreateCardMemberDto,
+  ): Promise<CardMember> {
     await this.tenantAccess.assertCardInOrg(cardId, orgId);
+    await this.tenantAccess.assertUserInOrg(dto.userId, orgId);
     return this.cardMembersRepo.save(
       this.cardMembersRepo.create({ cardId, userId: dto.userId }),
     );
@@ -25,9 +30,15 @@ export class CardMembersService {
     return this.cardMembersRepo.find({ where: { cardId } });
   }
 
-  async findOne(cardId: string, userId: string, orgId: string): Promise<CardMember> {
+  async findOne(
+    cardId: string,
+    userId: string,
+    orgId: string,
+  ): Promise<CardMember> {
     await this.tenantAccess.assertCardInOrg(cardId, orgId);
-    const member = await this.cardMembersRepo.findOne({ where: { cardId, userId } });
+    const member = await this.cardMembersRepo.findOne({
+      where: { cardId, userId },
+    });
     if (!member) {
       throw new NotFoundException('Card member not found');
     }

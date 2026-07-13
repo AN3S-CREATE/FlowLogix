@@ -5,6 +5,7 @@ import { Board } from './board.entity';
 import { CreateBoardDto } from './dto/create-board.dto';
 import { UpdateBoardDto } from './dto/update-board.dto';
 import { runInTenantContext } from '../common/tenant/tenant-transaction.util';
+import { TenantAccessService } from '../common/tenant/tenant-access.service';
 
 // Every method here runs through runInTenantContext rather than a plain
 // injected repository: the boards table has RLS enabled and the app
@@ -12,9 +13,15 @@ import { runInTenantContext } from '../common/tenant/tenant-transaction.util';
 // same transaction as the query or Postgres returns zero rows.
 @Injectable()
 export class BoardsService {
-  constructor(@InjectDataSource() private readonly dataSource: DataSource) {}
+  constructor(
+    @InjectDataSource() private readonly dataSource: DataSource,
+    private readonly tenantAccess: TenantAccessService,
+  ) {}
 
-  create(orgId: string, dto: CreateBoardDto): Promise<Board> {
+  async create(orgId: string, dto: CreateBoardDto): Promise<Board> {
+    if (dto.createdBy) {
+      await this.tenantAccess.assertUserInOrg(dto.createdBy, orgId);
+    }
     return runInTenantContext(this.dataSource, orgId, (manager) =>
       manager.save(Board, manager.create(Board, { ...dto, orgId })),
     );
@@ -36,7 +43,10 @@ export class BoardsService {
     });
   }
 
-  update(id: string, orgId: string, dto: UpdateBoardDto): Promise<Board> {
+  async update(id: string, orgId: string, dto: UpdateBoardDto): Promise<Board> {
+    if (dto.createdBy) {
+      await this.tenantAccess.assertUserInOrg(dto.createdBy, orgId);
+    }
     return runInTenantContext(this.dataSource, orgId, async (manager) => {
       const board = await manager.findOne(Board, { where: { id, orgId } });
       if (!board) {

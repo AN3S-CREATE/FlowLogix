@@ -40,13 +40,13 @@ export class User {
   avatarUrl: string | null;
 
   @Column({ type: 'varchar', length: 100, default: 'UTC' })
-  timezone: string;
+  timezone: string = 'UTC';
 
   @Column({ type: 'varchar', length: 20, default: 'en' })
-  locale: string;
+  locale: string = 'en';
 
   @Column({ name: 'is_active', type: 'boolean', default: true })
-  isActive: boolean;
+  isActive: boolean = true;
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;

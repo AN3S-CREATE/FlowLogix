@@ -14,14 +14,19 @@ export async function runInTenantContext<T>(
 ): Promise<T> {
   const queryRunner = dataSource.createQueryRunner();
   await queryRunner.connect();
-  await queryRunner.startTransaction();
   try {
-    await queryRunner.query('SELECT set_config($1, $2, true)', ['app.current_org_id', orgId]);
+    await queryRunner.startTransaction();
+    await queryRunner.query('SELECT set_config($1, $2, true)', [
+      'app.current_org_id',
+      orgId,
+    ]);
     const result = await work(queryRunner.manager);
     await queryRunner.commitTransaction();
     return result;
   } catch (error) {
-    await queryRunner.rollbackTransaction();
+    if (queryRunner.isTransactionActive) {
+      await queryRunner.rollbackTransaction();
+    }
     throw error;
   } finally {
     await queryRunner.release();

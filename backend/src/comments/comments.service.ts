@@ -14,8 +14,13 @@ export class CommentsService {
     private readonly tenantAccess: TenantAccessService,
   ) {}
 
-  async create(cardId: string, orgId: string, dto: CreateCommentDto): Promise<Comment> {
+  async create(
+    cardId: string,
+    orgId: string,
+    dto: CreateCommentDto,
+  ): Promise<Comment> {
     await this.tenantAccess.assertCardInOrg(cardId, orgId);
+    await this.tenantAccess.assertUserInOrg(dto.userId, orgId);
     return this.commentsRepo.save(this.commentsRepo.create({ ...dto, cardId }));
   }
 
@@ -29,11 +34,22 @@ export class CommentsService {
     if (!comment) {
       throw new NotFoundException('Comment not found');
     }
-    await this.tenantAccess.assertCardInOrg(comment.cardId, orgId);
+    // Normalize to the same "not found" message whether the comment
+    // doesn't exist or just belongs to another org, so callers can't
+    // probe for cross-tenant comment ids via the error text.
+    try {
+      await this.tenantAccess.assertCardInOrg(comment.cardId, orgId);
+    } catch {
+      throw new NotFoundException('Comment not found');
+    }
     return comment;
   }
 
-  async update(id: string, orgId: string, dto: UpdateCommentDto): Promise<Comment> {
+  async update(
+    id: string,
+    orgId: string,
+    dto: UpdateCommentDto,
+  ): Promise<Comment> {
     const comment = await this.findOne(id, orgId);
     Object.assign(comment, dto);
     return this.commentsRepo.save(comment);

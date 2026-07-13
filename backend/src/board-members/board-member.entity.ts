@@ -38,7 +38,7 @@ export class BoardMember {
     enumName: 'board_member_role',
     default: BoardMemberRole.MEMBER,
   })
-  role: BoardMemberRole;
+  role: BoardMemberRole = BoardMemberRole.MEMBER;
 
   @CreateDateColumn({ name: 'joined_at', type: 'timestamptz' })
   joinedAt: Date;

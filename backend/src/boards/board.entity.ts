@@ -50,7 +50,7 @@ export class Board {
   visibility: BoardVisibility;
 
   @Column({ name: 'bg_properties', type: 'jsonb', default: {} })
-  bgProperties: Record<string, unknown>;
+  bgProperties: Record<string, unknown> = {};
 
   @Index()
   @Column({ name: 'created_by', type: 'uuid', nullable: true })

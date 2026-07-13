@@ -1,12 +1,10 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { Board } from '../../boards/board.entity';
-import { List } from '../../lists/list.entity';
-import { Card } from '../../cards/card.entity';
+import { User } from '../../users/user.entity';
 import { TenantAccessService } from './tenant-access.service';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Board, List, Card])],
+  imports: [TypeOrmModule.forFeature([User])],
   providers: [TenantAccessService],
   exports: [TenantAccessService],
 })

@@ -32,7 +32,7 @@ export class List {
   positionIdx: number;
 
   @Column({ name: 'is_archived', type: 'boolean', default: false })
-  isArchived: boolean;
+  isArchived: boolean = false;
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;

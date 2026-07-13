@@ -20,8 +20,13 @@ export class BoardMembersService {
     dto: CreateBoardMemberDto,
   ): Promise<BoardMember> {
     await this.tenantAccess.assertBoardInOrg(boardId, orgId);
+    await this.tenantAccess.assertUserInOrg(dto.userId, orgId);
     return this.boardMembersRepo.save(
-      this.boardMembersRepo.create({ boardId, userId: dto.userId, role: dto.role }),
+      this.boardMembersRepo.create({
+        boardId,
+        userId: dto.userId,
+        role: dto.role,
+      }),
     );
   }
 
@@ -30,9 +35,15 @@ export class BoardMembersService {
     return this.boardMembersRepo.find({ where: { boardId } });
   }
 
-  async findOne(boardId: string, userId: string, orgId: string): Promise<BoardMember> {
+  async findOne(
+    boardId: string,
+    userId: string,
+    orgId: string,
+  ): Promise<BoardMember> {
     await this.tenantAccess.assertBoardInOrg(boardId, orgId);
-    const member = await this.boardMembersRepo.findOne({ where: { boardId, userId } });
+    const member = await this.boardMembersRepo.findOne({
+      where: { boardId, userId },
+    });
     if (!member) {
       throw new NotFoundException('Board member not found');
     }
