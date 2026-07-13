@@ -160,6 +160,14 @@ export class FractionalIndexer {
       );
     }
     if (count === 0) return [];
+    if (
+      targetLength !== undefined &&
+      (!Number.isInteger(targetLength) || targetLength < 2)
+    ) {
+      throw new Error(
+        `FractionalIndexer: targetLength must be an integer >= 2 (got ${targetLength})`,
+      );
+    }
 
     const base = this.alphabet.length;
     // We need capacity >= 2 * (count + 1) so that consecutive picks are at least
@@ -178,17 +186,31 @@ export class FractionalIndexer {
           );
         }
       }
-    } else if (capacity < required) {
-      throw new Error(
-        `FractionalIndexer: targetLength ${targetLength} is too small to evenly space ${count} keys`,
-      );
+    } else {
+      // A caller-forced width can also overflow the safe-integer range.
+      if (!Number.isSafeInteger(capacity)) {
+        throw new Error(
+          `FractionalIndexer: targetLength ${targetLength} is too large for a safe key space`,
+        );
+      }
+      if (capacity < required) {
+        throw new Error(
+          `FractionalIndexer: targetLength ${targetLength} is too small to evenly space ${count} keys`,
+        );
+      }
     }
 
+    // `(k + 1) * capacity` can exceed Number.MAX_SAFE_INTEGER for very large
+    // columns even when `capacity` itself is safe, so do the spacing division in
+    // BigInt for exact results. The quotient is <= capacity (a safe integer), so
+    // converting back to Number is lossless.
+    const capacityBig = BigInt(capacity);
+    const gapsBig = BigInt(count + 1);
     const keys: string[] = [];
     let previousValue = -1;
     for (let k = 0; k < count; k++) {
       // Even spacing: drop `count` picks into `count + 1` gaps.
-      let value = Math.floor(((k + 1) * capacity) / (count + 1));
+      let value = Number((BigInt(k + 1) * capacityBig) / gapsBig);
       // Preserve the no-trailing-zero invariant. `value % base === 0` means the
       // last digit is the zero char; +1 makes the last digit `1` and stays
       // strictly inside the >=2 gap to the next pick.
@@ -312,8 +334,13 @@ export class FractionalIndexer {
   }
 
   private static toMillis(value: Date | string | number): number {
-    if (value instanceof Date) return value.getTime();
-    if (typeof value === 'number') return value;
-    return new Date(value).getTime();
+    // `Date.parse` avoids allocating a Date per comparison during a sort. Any
+    // NaN (invalid date / NaN input) collapses to 0 so the comparator keeps a
+    // strict weak ordering — otherwise NaN comparisons break Array.sort.
+    let ms: number;
+    if (value instanceof Date) ms = value.getTime();
+    else if (typeof value === 'number') ms = value;
+    else ms = Date.parse(value);
+    return Number.isNaN(ms) ? 0 : ms;
   }
 }

@@ -245,6 +245,32 @@ describe('FractionalIndexer', () => {
       expect(indexer.rebalance(0)).toEqual([]);
       expect(indexer.rebalance([])).toEqual([]);
     });
+
+    it('honours an explicit targetLength', () => {
+      const keys = indexer.rebalance(5, 3);
+      expect(keys).toHaveLength(5);
+      keys.forEach((k) => expect(k.length).toBe(3));
+      expect(isSortedAscending(keys)).toBe(true);
+    });
+
+    it('rejects an invalid or too-small targetLength', () => {
+      expect(() => indexer.rebalance(5, 1)).toThrow(/integer >= 2/);
+      expect(() => indexer.rebalance(5, 2.5)).toThrow(/integer >= 2/);
+      // 62^2 = 3844 cannot evenly space 5000 items.
+      expect(() => indexer.rebalance(5000, 2)).toThrow(/too small/);
+    });
+
+    it('stays exact when (k+1)*capacity would overflow a JS number (BigInt spacing)', () => {
+      // 62^8 ≈ 2.18e14; by k≈41 the product (k+1)*capacity exceeds
+      // Number.MAX_SAFE_INTEGER (~9.007e15), which would silently lose
+      // precision without BigInt and could break strict ordering/uniqueness.
+      const keys = indexer.rebalance(50, 8);
+      expect(keys).toHaveLength(50);
+      keys.forEach((k) => expect(k.length).toBe(8));
+      expect(isSortedAscending(keys)).toBe(true);
+      expect(new Set(keys).size).toBe(keys.length);
+      keys.forEach((k) => expect(isValid(k)).toBe(true));
+    });
   });
 
   describe('FractionalIndexer.compare — collision ordering', () => {
@@ -293,6 +319,17 @@ describe('FractionalIndexer', () => {
       const a = item('M', '2026-01-01T00:00:00Z', 'same');
       const b = item('M', '2026-01-01T00:00:00Z', 'same');
       expect(FractionalIndexer.compare(a, b)).toBe(0);
+    });
+
+    it('keeps a strict weak ordering when created_at is an invalid date', () => {
+      const items = [
+        item('M', 'not-a-date', 'b'),
+        item('M', '2026-01-01T00:00:00Z', 'a'),
+      ];
+      // Must not throw and must produce a stable, consistent order.
+      expect(() => items.sort(FractionalIndexer.compare)).not.toThrow();
+      // Invalid date collapses to epoch 0, so it sorts before the 2026 item.
+      expect(items.map((i) => i.id)).toEqual(['b', 'a']);
     });
 
     it('accepts Date and epoch-ms created_at values', () => {
