@@ -29,6 +29,13 @@ const initialColumns: Record<ColumnId, KanbanColumn> = {
   done: { id: 'done', title: 'Done', cardIds: [] },
 };
 
+function createCardId(): CardId {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `card-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 export const useBoardStore = create<BoardState>((set) => ({
   columns: initialColumns,
   columnOrder: ['todo', 'in-progress', 'done'],
@@ -36,30 +43,34 @@ export const useBoardStore = create<BoardState>((set) => ({
 
   addCard: (columnId, title) =>
     set((state) => {
-      const id = crypto.randomUUID();
+      const column = state.columns[columnId];
+      if (!column) return state;
+
+      const id = createCardId();
       return {
         cards: { ...state.cards, [id]: { id, title } },
         columns: {
           ...state.columns,
-          [columnId]: {
-            ...state.columns[columnId],
-            cardIds: [...state.columns[columnId].cardIds, id],
-          },
+          [columnId]: { ...column, cardIds: [...column.cardIds, id] },
         },
       };
     }),
 
   moveCard: (cardId, from, to, index) =>
     set((state) => {
-      const fromCardIds = state.columns[from].cardIds.filter((id) => id !== cardId);
-      const toCardIds = [...state.columns[to].cardIds];
+      const fromColumn = state.columns[from];
+      const toColumn = state.columns[to];
+      if (!fromColumn || !toColumn) return state;
+
+      const fromCardIds = fromColumn.cardIds.filter((id) => id !== cardId);
+      const toCardIds = from === to ? fromCardIds : [...toColumn.cardIds];
       toCardIds.splice(index, 0, cardId);
 
       return {
         columns: {
           ...state.columns,
-          [from]: { ...state.columns[from], cardIds: fromCardIds },
-          [to]: { ...state.columns[to], cardIds: toCardIds },
+          [from]: { ...fromColumn, cardIds: fromCardIds },
+          [to]: { ...toColumn, cardIds: toCardIds },
         },
       };
     }),

@@ -9,6 +9,8 @@ export function Column({ columnId }: ColumnProps) {
   const cards = useBoardStore((state) => state.cards);
   const addCard = useBoardStore((state) => state.addCard);
 
+  if (!column) return null;
+
   return (
     <div className="w-72 shrink-0 rounded-lg bg-white p-3 shadow-sm">
       <div className="mb-3 flex items-center justify-between">
@@ -17,14 +19,18 @@ export function Column({ columnId }: ColumnProps) {
       </div>
 
       <div className="space-y-2">
-        {column.cardIds.map((cardId) => (
-          <div
-            key={cardId}
-            className="rounded-md border border-slate-200 bg-slate-50 p-2 text-sm text-slate-700"
-          >
-            {cards[cardId].title}
-          </div>
-        ))}
+        {column.cardIds.map((cardId) => {
+          const card = cards[cardId];
+          if (!card) return null;
+          return (
+            <div
+              key={cardId}
+              className="rounded-md border border-slate-200 bg-slate-50 p-2 text-sm text-slate-700"
+            >
+              {card.title}
+            </div>
+          );
+        })}
       </div>
 
       <button
