@@ -42,10 +42,15 @@ npm install
 
 ```bash
 cp backend/.env.example backend/.env
+npm run migration:run --workspace backend
 npm run dev:backend
 ```
 
-The API starts on `http://localhost:3000`.
+The API starts on `http://localhost:3000`. Every request to a tenant-scoped
+endpoint (organizations, users, boards, and everything nested under a board)
+must include an `X-Org-Id: <uuid>` header identifying the active
+organization — see [`backend/README.md`](backend/README.md#data-model--tenant-isolation)
+for how isolation is enforced.
 
 ### 4. Run the frontend
 
