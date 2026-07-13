@@ -15,12 +15,12 @@ imported below so there is a single source of truth shared with Cursor.
 These rules are the target the workspace is converging on; parts are not built
 yet. Notable gaps between the rules and the current code:
 
-- **RLS session variable.** The rules cite `current_setting('app.current_tenant_id')`.
-  The implemented migration (`backend/src/database/migrations/1783940500000-EnableRlsAndTriggers.ts`)
-  and the runtime helper (`backend/src/common/tenant/tenant-transaction.util.ts`)
-  currently use `app.current_org_id`. Keep the SQL policy and the
-  `set_config(...)` call in sync — if you standardise on `app.current_tenant_id`,
-  change both together in a migration.
+- **RLS session variable.** The boards policy and the runtime helper both use
+  `app.current_tenant_id`, matching the rules. The name lives in one place —
+  the `TENANT_SETTING` constant in
+  `backend/src/common/tenant/tenant-transaction.util.ts` — and the SQL policy
+  (see the `AlignRlsTenantSetting` migration) must always match it; if the two
+  ever diverge the fail-closed policy returns zero rows.
 - **RLS coverage.** RLS is currently enabled only on `boards`; `lists`, `cards`,
   and `comments` are isolated transitively at the application layer via
   `TenantAccessService`. Extending DB-level RLS to those tables (they have no
