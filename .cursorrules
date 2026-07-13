@@ -1,0 +1,45 @@
+# FlowLogix - AI System Coding Instructions (.cursorrules)
+
+This file contains the strict system-level coding rules, standards, and configuration details for the FlowLogix platform. When generating or editing code in this workspace, the AI assistant must adhere to these guidelines without exception.
+
+---
+
+## 1. Core Architectural Constraints
+- **Multi-Tenancy**: Every database schema, entity, and controller must strictly isolate data using the tenant's `org_id` UUID. Never generate a query, service method, or route that does not validate and filter by the active tenant context.
+- **Row-Level Security (RLS)**: PostgreSQL migrations must explicitly enable RLS on boards, lists, cards, and comments. Include clauses equivalent to: `USING (org_id = current_setting('app.current_tenant_id')::UUID)`.
+- **Card and List Ordering**: All sorting operations must utilize the `FractionalIndexer` Base62 algorithm. Do not use integer-based sequences for card positioning.
+
+---
+
+## 2. Tech Stack & Dependencies
+- **Backend**: NestJS, TypeScript, TypeORM/Prisma (for PostgreSQL), Mongoose (for MongoDB), `@nestjs/websockets`, `redis`.
+- **Frontend**: React (with Vite), TypeScript, Tailwind CSS, Zustand (state management), `@atlaskit/pragmatic-drag-and-drop` (for UI drag states).
+- **Mobile**: React Native, WatermelonDB (embedded SQLite persistence), last-write-wins CRDT handlers for sync.
+
+---
+
+## 3. Brand & UI/UX Styling Standards
+All CSS and styled components must strictly utilize the Veralogix Group corporate color palette. Never write generic colors for primary UI elements:
+
+| Token | Hex Code | Applied Elements |
+| :--- | :--- | :--- |
+| **Primary** | `#8DC63F` (Lime) | Buttons, focus rings, drag states, progress meters, selected indicators. |
+| **Secondary** | `#231F20` (Charcoal) | Headers, sidebars, navigation bars, default body text, primary dark buttons. |
+| **Neutral Light** | `#F1F2F2` (Cool Grey) | Global background canvas, list container backgrounds, inactive borders. |
+| **Card Surface** | `#FFFFFF` (White) | Card containers, modal content fields, dropdown panels. |
+- **Logo & User Avatars**: Always render the official Veralogix logo using inline SVGs containing the corporate network globe and customized typography wordmark. For user profile pictures/avatars, always use the 'BrandedAvatar' SVG React component, displaying user initials centered over the `#8DC63F` Lime Green background with a 15% opacity network globe overlay. Never fall back to generic image URLs or unstyled text circles.
+
+---
+
+## 4. Coding & Implementation Rules
+- **TypeScript**: Strict mode is enabled. No use of `any` types. All function signatures must have explicit return types.
+- **State Management**: Keep Zustand store updates atomic. Use optimistic UI updates for all drag-and-drop actions, keeping local state updated immediately while dispatching the background mutation API.
+- **WebSocket Synchronization**: Decouple database writes from WebSocket push. Sockets should only broadcast change events triggered by Redis Pub/Sub, subscribing to the board's channel: `board:room:{boardId}`.
+- **Error Handling**: Implement global exception filters in NestJS. Roll back optimistic UI changes on the frontend if the server returns a non-200/201 mutation response.
+
+---
+
+## 5. Testing Requirements
+- Every new backend service and utility must have matching unit tests written with Jest or Vitest.
+- Mock all database connections and Redis configurations in unit tests.
+- Ensure that fractional indexing calculations are rigorously unit-tested under edge-case conditions (e.g., intermediate inserts at extreme string precisions).
