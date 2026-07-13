@@ -58,8 +58,8 @@ Isolation is enforced at two layers:
 
    ```sql
    CREATE POLICY boards_tenant_isolation ON boards
-     USING (org_id = current_setting('app.current_org_id', true)::uuid)
-     WITH CHECK (org_id = current_setting('app.current_org_id', true)::uuid);
+     USING (org_id = current_setting('app.current_tenant_id', true)::uuid)
+     WITH CHECK (org_id = current_setting('app.current_tenant_id', true)::uuid);
    ```
 
    `current_setting(..., true)` returns `NULL` when unset, so a query that
@@ -75,7 +75,7 @@ the running app connects as that role instead — `POSTGRES_USER` is only used
 by migrations, which need DDL rights. `BoardsService` and
 `TenantAccessService.assertBoardInOrg` run their board queries inside
 `runInTenantContext` (`src/common/tenant/tenant-transaction.util.ts`), which
-opens a transaction and does `SELECT set_config('app.current_org_id', $1, true)`
+opens a transaction and does `SELECT set_config('app.current_tenant_id', $1, true)`
 (the `SET LOCAL` equivalent) before querying — required because `SET LOCAL`
 only lasts for the transaction it's issued in.
 
@@ -87,7 +87,7 @@ SELECT count(*) FROM boards;
 
 -- as logixflow_app, tenant set: only that org's boards
 BEGIN;
-SELECT set_config('app.current_org_id', '<org-uuid>', true);
+SELECT set_config('app.current_tenant_id', '<org-uuid>', true);
 SELECT * FROM boards;
 COMMIT;
 ```

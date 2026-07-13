@@ -9,7 +9,7 @@ import { TenantAccessService } from '../common/tenant/tenant-access.service';
 
 // Every method here runs through runInTenantContext rather than a plain
 // injected repository: the boards table has RLS enabled and the app
-// connects as a non-owner role, so app.current_org_id must be set on the
+// connects as a non-owner role, so app.current_tenant_id must be set on the
 // same transaction as the query or Postgres returns zero rows.
 @Injectable()
 export class BoardsService {
