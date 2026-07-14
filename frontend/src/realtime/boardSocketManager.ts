@@ -34,6 +34,14 @@ export interface BoardSocketOptions {
   flushOutbound?: (item: QueuedOutbound) => Promise<void>;
   /** Injectable storage (defaults to localStorage, with an in-memory fallback). */
   storage?: KeyValueStore;
+  /**
+   * Invoked when the client fell so far behind that the frames it missed have
+   * already rotated out of the server's replay window — the gap is
+   * unrecoverable by delta-sync. The consumer should refetch the whole board
+   * (e.g. re-run the REST load) to reconcile. The manager realigns `lastSeq` to
+   * the server head so it resumes cleanly afterwards.
+   */
+  onNeedsResync?: () => void;
 }
 
 /** The tiny slice of the Web Storage API this manager needs. */
@@ -128,7 +136,22 @@ export class BoardSocketManager {
     });
 
     socket.on(WS.SYNC_RESULT, (result: BoardSyncResult) => {
-      // Frames are ordered; apply each exactly once and advance lastSeq.
+      const lastSeq = this.getLastSeq();
+      // Unrecoverable gap: the frames we missed have aged out of the server's
+      // replay window (first returned seq skips ahead, or nothing came back
+      // even though the server is ahead of us). Applying these would silently
+      // corrupt state, so realign to the head and ask for a full reload.
+      const hasGap =
+        (result.events.length > 0 && result.events[0].seq > lastSeq + 1) ||
+        (result.events.length === 0 && result.headSeq > lastSeq);
+      if (hasGap) {
+        this.setLastSeq(result.headSeq);
+        this.opts.onNeedsResync?.();
+        this.emitStatus('synced');
+        return;
+      }
+
+      // Frames are contiguous and ordered; apply each exactly once.
       for (const envelope of result.events) {
         this.applyInOrder(envelope);
       }

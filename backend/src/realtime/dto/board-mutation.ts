@@ -3,6 +3,7 @@
  * state mutations* — the minimum a peer needs to reconcile its optimistic UI —
  * never full entities, per `.cursorrules` §4.
  */
+import { IsNotEmpty, IsNumber, IsString } from 'class-validator';
 
 /** Kinds of board mutation broadcast to peers. */
 export type BoardMutationType =
@@ -40,9 +41,15 @@ export interface BoardMutationEnvelope {
   ts: number;
 }
 
-/** Client -> server join request. `orgId` is validated against board ownership. */
-export interface BoardJoinRequest {
-  boardId: string;
+/**
+ * Client -> server join request. Declared as a class with `class-validator`
+ * decorators so the gateway's `ValidationPipe` actually validates it — an
+ * `interface` has no runtime metadata and the pipe would silently no-op.
+ */
+export class BoardJoinRequest {
+  @IsString()
+  @IsNotEmpty()
+  boardId!: string;
 }
 
 /** Server -> client join acknowledgement carrying the current head sequence. */
@@ -53,10 +60,14 @@ export interface BoardJoinAck {
 }
 
 /** Client -> server delta-sync request after a reconnect. */
-export interface BoardSyncRequest {
-  boardId: string;
+export class BoardSyncRequest {
+  @IsString()
+  @IsNotEmpty()
+  boardId!: string;
+
   /** Highest sequence the client has already applied. */
-  lastSeq: number;
+  @IsNumber()
+  lastSeq!: number;
 }
 
 /** Server -> client delta-sync response: the ordered gap of missed frames. */

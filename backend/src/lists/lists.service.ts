@@ -25,7 +25,8 @@ export class ListsService {
     const list = await this.listsRepo.save(
       this.listsRepo.create({ ...dto, boardId }),
     );
-    await this.boardEvents.emit('list.created', boardId, {
+    // Fire-and-forget: best-effort broadcast, don't block the response on Redis.
+    void this.boardEvents.emit('list.created', boardId, {
       listId: list.id,
       positionIdx: list.positionIdx,
     });
@@ -45,7 +46,7 @@ export class ListsService {
     const list = await this.tenantAccess.assertListInOrg(id, orgId);
     Object.assign(list, dto);
     const saved = await this.listsRepo.save(list);
-    await this.boardEvents.emit('list.updated', saved.boardId, {
+    void this.boardEvents.emit('list.updated', saved.boardId, {
       listId: saved.id,
       positionIdx: saved.positionIdx,
     });
@@ -56,6 +57,6 @@ export class ListsService {
     const list = await this.tenantAccess.assertListInOrg(id, orgId);
     const boardId = list.boardId;
     await this.listsRepo.remove(list);
-    await this.boardEvents.emit('list.deleted', boardId, { listId: id });
+    void this.boardEvents.emit('list.deleted', boardId, { listId: id });
   }
 }

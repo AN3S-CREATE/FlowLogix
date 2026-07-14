@@ -26,8 +26,9 @@ export class CardsService {
     const card = await this.cardsRepo.save(
       this.cardsRepo.create({ ...dto, listId }),
     );
-    // Broadcast only after the write is committed (decoupled per .cursorrules §4).
-    await this.boardEvents.emit('card.created', list.boardId, {
+    // Broadcast after commit, fire-and-forget: the write is authoritative and
+    // emit() is best-effort, so we don't block the response on Redis latency.
+    void this.boardEvents.emit('card.created', list.boardId, {
       cardId: card.id,
       listId: card.listId,
       positionIdx: card.positionIdx,
@@ -54,7 +55,7 @@ export class CardsService {
     const moved =
       saved.listId !== fromListId ||
       (dto.positionIdx !== undefined && dto.positionIdx !== null);
-    await this.boardEvents.emit(
+    void this.boardEvents.emit(
       moved ? 'card.moved' : 'card.updated',
       card.list.boardId,
       {
@@ -71,7 +72,7 @@ export class CardsService {
     const boardId = card.list.boardId;
     const listId = card.listId;
     await this.cardsRepo.remove(card);
-    await this.boardEvents.emit('card.deleted', boardId, {
+    void this.boardEvents.emit('card.deleted', boardId, {
       cardId: id,
       listId,
     });
