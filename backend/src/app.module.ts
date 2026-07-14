@@ -11,6 +11,7 @@ import { ListsModule } from './lists/lists.module';
 import { CardsModule } from './cards/cards.module';
 import { CardMembersModule } from './card-members/card-members.module';
 import { CommentsModule } from './comments/comments.module';
+import { RealtimeModule } from './realtime/realtime.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { CommentsModule } from './comments/comments.module';
     CardsModule,
     CardMembersModule,
     CommentsModule,
+    RealtimeModule,
   ],
   controllers: [AppController],
   providers: [AppService],
