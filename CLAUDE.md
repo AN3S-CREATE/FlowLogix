@@ -29,9 +29,18 @@ yet. Notable gaps between the rules and the current code:
   exists and is tested, but `lists.position_idx` / `cards.position_idx` are still
   `double precision`. Adopting fractional indexing means migrating those columns
   to `varchar`/`text` and writing new positions through `FractionalIndexer`.
-- **Frontend / mobile / websockets.** The React SPA is a minimal scaffold; the
-  Zustand optimistic-update, Redis pub/sub websocket, brand palette, and React
-  Native / WatermelonDB pieces described in the rules are not implemented yet.
+- **Real-time websockets.** Implemented. `backend/src/realtime/` holds the
+  Socket.io gateway, the Redis Pub/Sub service, and `BoardEventsService` — the
+  service-layer capture point that publishes lightweight `{ cardId, listId,
+  positionIdx }` deltas to `board:room:{boardId}` *after* the DB write commits
+  (decoupled per §4). `CardsService`/`ListsService` call it; the gateway
+  pattern-subscribes and fans frames out to the matching room, with an org
+  ownership check on join and a Redis-backed replay log for reconnect
+  delta-sync. The client half is `frontend/src/realtime/boardSocketManager.ts`.
+- **Frontend / mobile.** The React SPA is a minimal scaffold; the Zustand
+  optimistic-update, brand palette, and React Native / WatermelonDB pieces
+  described in the rules are still outstanding (the branded board UI and the
+  socket manager exist; store wiring of live frames is the next step).
 
 When you implement any of the above, follow `.cursorrules` and update this
 status list.
