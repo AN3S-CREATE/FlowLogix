@@ -1,77 +1,127 @@
 import { create } from 'zustand';
+import { BoardSummary, Card, Id, List, Member } from './types';
+import { seedBoard, seedCards, seedLists, seedMembers } from './seed';
+import { persistCardMove } from './persistence';
 
-export type CardId = string;
-export type ColumnId = string;
-
-export interface KanbanCard {
-  id: CardId;
-  title: string;
-  description?: string;
+/** Immutable snapshot of the ordering used to roll a failed move back. */
+interface ListsSnapshot {
+  lists: List[];
 }
 
-export interface KanbanColumn {
-  id: ColumnId;
-  title: string;
-  cardIds: CardId[];
+interface BoardSlice {
+  board: BoardSummary;
+  lists: List[];
+  cards: Record<Id, Card>;
+  addCard: (listId: Id, title: string) => void;
+  toggleChecklistItem: (cardId: Id, itemId: Id) => void;
+  /**
+   * Moves a card optimistically (state updates before the network call) and
+   * rolls the ordering back if persistence fails.
+   */
+  moveCard: (
+    cardId: Id,
+    fromListId: Id,
+    toListId: Id,
+    toIndex: number,
+  ) => Promise<void>;
 }
 
-interface BoardState {
-  columns: Record<ColumnId, KanbanColumn>;
-  columnOrder: ColumnId[];
-  cards: Record<CardId, KanbanCard>;
-  addCard: (columnId: ColumnId, title: string) => void;
-  moveCard: (cardId: CardId, from: ColumnId, to: ColumnId, index: number) => void;
+interface MembersSlice {
+  members: Record<Id, Member>;
+  memberList: () => Member[];
 }
 
-const initialColumns: Record<ColumnId, KanbanColumn> = {
-  todo: { id: 'todo', title: 'To Do', cardIds: [] },
-  'in-progress': { id: 'in-progress', title: 'In Progress', cardIds: [] },
-  done: { id: 'done', title: 'Done', cardIds: [] },
-};
-
-function createCardId(): CardId {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID();
-  }
-  return `card-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+interface UiSlice {
+  /** Card id currently being dragged, or null. Drives the 40%-opacity source. */
+  draggingCardId: Id | null;
+  /** Last move that failed to persist — surfaced as an inline banner. */
+  moveError: string | null;
+  setDraggingCardId: (id: Id | null) => void;
+  clearMoveError: () => void;
 }
 
-export const useBoardStore = create<BoardState>((set) => ({
-  columns: initialColumns,
-  columnOrder: ['todo', 'in-progress', 'done'],
-  cards: {},
+export type BoardStore = BoardSlice & MembersSlice & UiSlice;
 
-  addCard: (columnId, title) =>
+const snapshot = (lists: List[]): ListsSnapshot => ({
+  lists: lists.map((l) => ({ ...l, cardIds: [...l.cardIds] })),
+});
+
+const createId = (): string =>
+  typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : `card-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+export const useBoardStore = create<BoardStore>((set, get) => ({
+  // --- members slice ---
+  members: Object.fromEntries(seedMembers.map((m) => [m.id, m])),
+  memberList: () => get().board.memberIds.map((id) => get().members[id]).filter(Boolean),
+
+  // --- ui / drag slice ---
+  draggingCardId: null,
+  moveError: null,
+  setDraggingCardId: (id) => set({ draggingCardId: id }),
+  clearMoveError: () => set({ moveError: null }),
+
+  // --- board slice ---
+  board: seedBoard,
+  lists: seedLists,
+  cards: seedCards,
+
+  addCard: (listId, title) =>
     set((state) => {
-      const column = state.columns[columnId];
-      if (!column) return state;
-
-      const id = createCardId();
+      const trimmed = title.trim();
+      if (!trimmed) return state;
+      const id = createId();
+      const card: Card = {
+        id,
+        title: trimmed,
+        priority: 'medium',
+        assigneeIds: [],
+        checklist: [],
+        isComplete: false,
+      };
       return {
-        cards: { ...state.cards, [id]: { id, title } },
-        columns: {
-          ...state.columns,
-          [columnId]: { ...column, cardIds: [...column.cardIds, id] },
-        },
+        cards: { ...state.cards, [id]: card },
+        lists: state.lists.map((l) =>
+          l.id === listId ? { ...l, cardIds: [...l.cardIds, id] } : l,
+        ),
       };
     }),
 
-  moveCard: (cardId, from, to, index) =>
+  toggleChecklistItem: (cardId, itemId) =>
     set((state) => {
-      const fromColumn = state.columns[from];
-      const toColumn = state.columns[to];
-      if (!fromColumn || !toColumn) return state;
-
-      const fromCardIds = fromColumn.cardIds.filter((id) => id !== cardId);
-      const toCardIds = from === to ? fromCardIds : [...toColumn.cardIds];
-      toCardIds.splice(index, 0, cardId);
-
-      return {
-        columns: {
-          ...state.columns,
-          [from]: { ...fromColumn, cardIds: fromCardIds },
-          [to]: { ...toColumn, cardIds: toCardIds },
-        },
-      };
+      const card = state.cards[cardId];
+      if (!card) return state;
+      const checklist = card.checklist.map((item) =>
+        item.id === itemId ? { ...item, done: !item.done } : item,
+      );
+      return { cards: { ...state.cards, [cardId]: { ...card, checklist } } };
     }),
+
+  moveCard: async (cardId, fromListId, toListId, toIndex) => {
+    const before = snapshot(get().lists);
+
+    // Optimistic update — render the card in the target position immediately.
+    set((state) => {
+      const lists = state.lists.map((l) => ({ ...l, cardIds: [...l.cardIds] }));
+      const from = lists.find((l) => l.id === fromListId);
+      const to = lists.find((l) => l.id === toListId);
+      if (!from || !to) return state;
+      const currentIndex = from.cardIds.indexOf(cardId);
+      if (currentIndex === -1) return state;
+      from.cardIds.splice(currentIndex, 1);
+      to.cardIds.splice(toIndex, 0, cardId);
+      return { lists, moveError: null };
+    });
+
+    try {
+      await persistCardMove({ cardId, fromListId, toListId, toIndex });
+    } catch (err) {
+      // Roll the optimistic change back and surface the failure.
+      set({
+        lists: before.lists,
+        moveError: err instanceof Error ? err.message : 'Move failed',
+      });
+    }
+  },
 }));
