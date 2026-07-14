@@ -21,15 +21,28 @@ export class WsExceptionFilter extends BaseWsExceptionFilter {
     const client = host.switchToWs().getClient<Socket>();
     const clientMessage = this.safeMessage(exception);
 
-    // Log the real error (whatever it is) but only ever emit the safe message.
-    this.logger.warn(
-      `WS handler error: ${
-        exception instanceof Error ? exception.message : String(exception)
-      }`,
-    );
+    // Expected exceptions (bad input, auth) are just warnings; anything else is
+    // an unexpected runtime error — log it at error level with the full stack so
+    // it's diagnosable in production. Either way, only the safe message is emitted.
+    if (this.isExpected(exception)) {
+      this.logger.warn(`WS handler error: ${clientMessage}`);
+    } else {
+      this.logger.error(
+        `Unexpected WS handler error: ${
+          exception instanceof Error ? exception.message : String(exception)
+        }`,
+        exception instanceof Error ? exception.stack : undefined,
+      );
+    }
     if (client && typeof client.emit === 'function') {
       client.emit(WS_EVENTS.ERROR, { message: clientMessage });
     }
+  }
+
+  private isExpected(exception: unknown): boolean {
+    return (
+      exception instanceof WsException || exception instanceof HttpException
+    );
   }
 
   private safeMessage(exception: unknown): string {

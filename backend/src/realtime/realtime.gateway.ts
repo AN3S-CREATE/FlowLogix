@@ -126,6 +126,12 @@ export class RealtimeGateway
   private broadcast(channel: string, envelope: BoardMutationEnvelope): void {
     const boardId = boardIdFromRoomChannel(channel);
     if (!boardId) return;
+    if (!this.server) {
+      // A frame arrived before the server was injected (startup race / test);
+      // drop it rather than throwing — peers recover via delta-sync.
+      this.logger.warn('Socket.io server not initialised, dropping broadcast');
+      return;
+    }
     this.server.to(boardRoom(boardId)).emit(WS_EVENTS.MUTATION, envelope);
   }
 

@@ -42,6 +42,14 @@ export interface BoardSocketOptions {
    * the server head so it resumes cleanly afterwards.
    */
   onNeedsResync?: () => void;
+  /**
+   * Max times a single offline mutation is retried before it's dropped, so one
+   * permanently-failing write (e.g. a 4xx that will never succeed) can't block
+   * the rest of the queue forever. Defaults to 5.
+   */
+  maxOutboundAttempts?: number;
+  /** Notified when a queued mutation is discarded after exhausting its retries. */
+  onOutboundDropped?: (item: QueuedOutbound) => void;
 }
 
 /** The tiny slice of the Web Storage API this manager needs. */
@@ -122,8 +130,16 @@ export class BoardSocketManager {
 
     socket.on(WS.JOINED, (ack: BoardJoinAck) => {
       this.emitStatus('connected');
-      // If the server is ahead of us, pull the frames we missed while away.
-      if (ack.headSeq > this.getLastSeq()) {
+      const lastSeq = this.getLastSeq();
+      if (lastSeq > ack.headSeq) {
+        // Server sequence reset (Redis flushed/restarted): our lastSeq is stale
+        // and higher than the server head, which would make us discard every
+        // future frame as a duplicate. Realign to the head and reload.
+        this.setLastSeq(ack.headSeq);
+        this.opts.onNeedsResync?.();
+        this.emitStatus('synced');
+      } else if (ack.headSeq > lastSeq) {
+        // Server is ahead: pull the frames we missed while away.
         this.requestSync();
       } else {
         this.emitStatus('synced');
@@ -249,6 +265,7 @@ export class BoardSocketManager {
     if (this.flushing || !this.opts.flushOutbound) return;
     if (!this.socket?.connected) return;
     this.flushing = true;
+    const maxAttempts = this.opts.maxOutboundAttempts ?? 5;
     try {
       // Drain in FIFO order; stop on the first failure so ordering is preserved.
       let queue = this.readOutbox();
@@ -257,7 +274,21 @@ export class BoardSocketManager {
         try {
           await this.opts.flushOutbound(next);
         } catch {
-          break; // leave `next` (and the rest) queued for the next attempt
+          const attempts = (next.attempts ?? 0) + 1;
+          if (attempts >= maxAttempts) {
+            // Poison pill (e.g. a permanent 4xx): drop it so it can't block the
+            // rest of the queue forever, and let the consumer react.
+            queue = this.readOutbox().filter((item) => item.id !== next.id);
+            this.writeOutbox(queue);
+            this.opts.onOutboundDropped?.(next);
+            continue;
+          }
+          // Transient failure: bump the count and stop; retry on the next flush.
+          queue = this.readOutbox().map((item) =>
+            item.id === next.id ? { ...item, attempts } : item,
+          );
+          this.writeOutbox(queue);
+          break;
         }
         queue = this.readOutbox().filter((item) => item.id !== next.id);
         this.writeOutbox(queue);

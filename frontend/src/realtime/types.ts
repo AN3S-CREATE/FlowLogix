@@ -52,4 +52,6 @@ export interface QueuedOutbound {
   type: BoardMutationType;
   payload: BoardMutationPayload;
   queuedAt: number;
+  /** Failed flush attempts so far; the item is dropped once it hits the cap. */
+  attempts?: number;
 }
