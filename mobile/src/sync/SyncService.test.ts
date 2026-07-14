@@ -92,7 +92,7 @@ describe('SyncEngine offline mutations', () => {
     const { engine, store } = makeEngine({
       network: new ManualNetworkMonitor(false, 'none'),
     });
-    await engine.mutate('c1', { title: 'Draft', listId: 'l1' });
+    await engine.create('c1', { title: 'Draft', description: '', listId: 'l1' });
 
     const row = store.rows.get('c1')!;
     expect(row.fields.title).toBe('Draft');
@@ -102,7 +102,7 @@ describe('SyncEngine offline mutations', () => {
 
   it('only re-stamps the fields present in the patch', async () => {
     const { engine, store } = makeEngine();
-    await engine.mutate('c1', { title: 'A', description: 'D' });
+    await engine.create('c1', { title: 'A', description: 'D', listId: 'l1' });
     const first = store.rows.get('c1')!;
     const descClock = first.clocks.description;
 
@@ -116,7 +116,7 @@ describe('SyncEngine offline mutations', () => {
     const { engine } = makeEngine({
       network: new ManualNetworkMonitor(false, 'none'),
     });
-    await engine.mutate('c1', { title: 'Offline' });
+    await engine.create('c1', { title: 'Offline', description: '', listId: 'l1' });
     const report = await engine.sync();
     expect(report.skippedOffline).toBe(true);
     expect(report.pushed).toBe(0);
@@ -130,7 +130,7 @@ describe('SyncEngine reconnect merge', () => {
   });
 
   it('pulls remote changes and pushes local pending edits', async () => {
-    await ctx.engine.mutate('c1', { title: 'Local', listId: 'l1' });
+    await ctx.engine.create('c1', { title: 'Local', description: '', listId: 'l1' });
     ctx.transport.pullQueue = [
       {
         id: 'c2',
@@ -151,7 +151,7 @@ describe('SyncEngine reconnect merge', () => {
 
   it('merges a conflicting record field-by-field (later timestamp wins)', async () => {
     // Local edited the title late; server edited the description late.
-    await ctx.engine.mutate('c1', {
+    await ctx.engine.create('c1', {
       title: 'Local title',
       description: 'stale',
       listId: 'l1',
@@ -179,7 +179,11 @@ describe('SyncEngine reconnect merge', () => {
   });
 
   it('keeps a record pending if a local field still beats the server', async () => {
-    await ctx.engine.mutate('c1', { title: 'Local wins', listId: 'l1' });
+    await ctx.engine.create('c1', {
+      title: 'Local wins',
+      description: '',
+      listId: 'l1',
+    });
     const titleClock = ctx.store.rows.get('c1')!.clocks.title;
     // Server sends an OLDER version of the same record during pull.
     ctx.transport.pullQueue = [
@@ -216,8 +220,8 @@ describe('SyncEngine convergence', () => {
 
     // Both start from the same seed.
     const seed = { title: 'Seed', description: 'Seed', listId: 'l1' };
-    await a.engine.mutate('c1', seed);
-    await b.engine.mutate('c1', seed);
+    await a.engine.create('c1', seed);
+    await b.engine.create('c1', seed);
 
     // A edits title later; B edits description even later.
     await a.engine.mutate('c1', { title: 'A title' });

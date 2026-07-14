@@ -24,6 +24,8 @@ export interface AttachmentQueueConfig {
   schedule?: (fn: () => void, ms: number) => void;
 }
 
+type ResolvedConfig = Required<AttachmentQueueConfig>;
+
 /**
  * Background upload queue for large attachments.
  *
@@ -31,28 +33,41 @@ export interface AttachmentQueueConfig {
  * offline), and the actual transfer is deferred until the device is on a
  * connection worth spending bytes on — **Wi-Fi or cellular/LTE**, never while
  * offline (see `isSuitableForLargeUpload`). The queue survives restarts because
- * every item is persisted; on a network upgrade it drains automatically, with
- * bounded concurrency and exponential backoff on failure.
+ * every item is persisted; on a network upgrade it drains automatically.
+ *
+ * Concurrency is a **dynamic worker pool** of `maxConcurrent` workers: each
+ * grabs the next runnable item as soon as it finishes the last one, so a single
+ * slow upload never blocks the others (no batch barrier). Failures back off
+ * exponentially; after `maxAttempts` an item is parked as terminal `failed`
+ * (only a manual `retry` re-queues it, so a poison item can't spin the pool).
  */
 export class AttachmentUploadQueue {
-  private readonly cfg: Required<AttachmentQueueConfig>;
-  private inFlight = new Set<string>();
+  private readonly cfg: ResolvedConfig;
+  private readonly inFlight = new Set<string>();
+  /** Pending backoff timers, cleared on `stop()` so nothing runs after teardown. */
+  private readonly timers = new Set<ReturnType<typeof setTimeout>>();
   private unsubscribe: (() => void) | null = null;
-  /** Re-entrancy guard so only one drain loop runs at a time. */
+  private stopped = false;
+  /** Re-entrancy guard so only one drain runs at a time. */
   private draining = false;
-  /** Set when `process` is called mid-drain, so the loop takes another pass. */
+  /** Set when `process` is called mid-drain, so the drain takes another pass. */
   private rerun = false;
 
   constructor(config: AttachmentQueueConfig) {
+    const defaultSchedule = (fn: () => void, ms: number): void => {
+      const id = setTimeout(() => {
+        this.timers.delete(id);
+        fn();
+      }, ms);
+      this.timers.add(id);
+    };
     this.cfg = {
       maxConcurrent: 2,
       maxAttempts: 6,
       backoffBaseMs: 2000,
       backoffMaxMs: 5 * 60 * 1000,
       now: () => Date.now(),
-      schedule: (fn, ms) => {
-        setTimeout(fn, ms);
-      },
+      schedule: config.schedule ?? defaultSchedule,
       ...config,
     };
   }
@@ -60,15 +75,18 @@ export class AttachmentUploadQueue {
   /** Start draining automatically whenever the network becomes suitable. */
   start(): void {
     if (this.unsubscribe) return;
-    this.unsubscribe = this.cfg.network.subscribe(() => {
-      void this.process();
-    });
-    void this.process();
+    this.stopped = false;
+    this.unsubscribe = this.cfg.network.subscribe(() => this.kick());
+    this.kick();
   }
 
+  /** Tear down: stop listening and cancel any pending backoff timers. */
   stop(): void {
+    this.stopped = true;
     this.unsubscribe?.();
     this.unsubscribe = null;
+    for (const id of this.timers) clearTimeout(id);
+    this.timers.clear();
   }
 
   /** Stage a file for upload. Returns immediately; the transfer is deferred. */
@@ -80,7 +98,7 @@ export class AttachmentUploadQueue {
       nextAttemptAt: 0,
     };
     await this.cfg.store.put(record);
-    void this.process();
+    this.kick();
     return record;
   }
 
@@ -98,15 +116,21 @@ export class AttachmentUploadQueue {
       nextAttemptAt: 0,
       lastError: undefined,
     });
-    void this.process();
+    this.kick();
+  }
+
+  /** Fire-and-forget drain that can't become an unhandled rejection. */
+  private kick(): void {
+    this.process().catch((err) => {
+      // eslint-disable-next-line no-console
+      console.error('Attachment upload drain failed', err);
+    });
   }
 
   /**
-   * Drain the queue while the network stays suitable and there's spare
-   * concurrency. A single drain loop runs at a time (`draining` guard); calls
-   * that arrive mid-drain flip `rerun` so the loop takes another pass and picks
-   * up anything enqueued in the meantime — no work is stranded and there are no
-   * floating recursive calls to leak between runs.
+   * Drain the queue with a worker pool while the network stays suitable. A
+   * single drain runs at a time (`draining` guard); calls that arrive mid-drain
+   * flip `rerun` so it takes another pass and picks up newly-enqueued work.
    */
   async process(): Promise<void> {
     if (this.draining) {
@@ -118,28 +142,42 @@ export class AttachmentUploadQueue {
       this.rerun = true;
       while (this.rerun) {
         this.rerun = false;
-        while (isSuitableForLargeUpload(this.cfg.network)) {
-          const capacity = this.cfg.maxConcurrent - this.inFlight.size;
-          if (capacity <= 0) break;
-
-          const batch = (await this.cfg.store.listRunnable(this.cfg.now()))
-            // Only auto-run queued items. `failed` is terminal (retries
-            // exhausted) — it must not be picked up here, or the loop would
-            // spin on it forever since its backoff is already in the past.
-            .filter((r) => r.status === 'queued' && !this.inFlight.has(r.id))
-            .slice(0, capacity);
-          if (batch.length === 0) break;
-
-          await Promise.all(batch.map((record) => this.run(record)));
-        }
+        await this.drainOnce();
       }
     } finally {
       this.draining = false;
     }
   }
 
-  private async run(record: AttachmentUpload): Promise<void> {
-    this.inFlight.add(record.id);
+  /** Run up to `maxConcurrent` workers; each pulls the next item until dry. */
+  private async drainOnce(): Promise<void> {
+    const workerCount = Math.max(1, this.cfg.maxConcurrent);
+    await Promise.all(
+      Array.from({ length: workerCount }, () => this.worker()),
+    );
+  }
+
+  private async worker(): Promise<void> {
+    for (;;) {
+      if (this.stopped || !isSuitableForLargeUpload(this.cfg.network)) return;
+      const runnable = await this.cfg.store.listRunnable(this.cfg.now());
+      // Only auto-run queued items; `failed` is terminal. Claim synchronously
+      // (no await between the find and the `inFlight.add`) so two workers can't
+      // grab the same item.
+      const next = runnable.find(
+        (r) => r.status === 'queued' && !this.inFlight.has(r.id),
+      );
+      if (!next) return;
+      this.inFlight.add(next.id);
+      try {
+        await this.runClaimed(next);
+      } finally {
+        this.inFlight.delete(next.id);
+      }
+    }
+  }
+
+  private async runClaimed(record: AttachmentUpload): Promise<void> {
     await this.cfg.store.put({ ...record, status: 'uploading' });
     try {
       const remoteUrl = await this.cfg.uploader.upload(record);
@@ -151,8 +189,6 @@ export class AttachmentUploadQueue {
       });
     } catch (err) {
       await this.handleFailure(record, err);
-    } finally {
-      this.inFlight.delete(record.id);
     }
   }
 
@@ -178,15 +214,14 @@ export class AttachmentUploadQueue {
       this.cfg.backoffMaxMs,
       this.cfg.backoffBaseMs * 2 ** (attempts - 1),
     );
-    const nextAttemptAt = this.cfg.now() + delay;
     await this.cfg.store.put({
       ...record,
       status: 'queued',
       attempts,
-      nextAttemptAt,
+      nextAttemptAt: this.cfg.now() + delay,
       lastError: message,
     });
     // Wake up when the backoff elapses (a network event may drain us sooner).
-    this.cfg.schedule(() => void this.process(), delay);
+    if (!this.stopped) this.cfg.schedule(() => this.kick(), delay);
   }
 }

@@ -1,5 +1,4 @@
 import { Database, Q } from '@nozbe/watermelondb';
-import type { DirtyRaw } from '@nozbe/watermelondb/RawRecord';
 import { LocalRecord, LocalStore } from '../sync/ports';
 import {
   AttachmentUpload,
@@ -48,24 +47,21 @@ function cardToLocalRecord(card: Card): LocalRecord<CardFields> {
   };
 }
 
-/** Flatten a versioned card into the SQLite column layout (a DirtyRaw). */
-function localRecordToRaw(record: LocalRecord<CardFields>): DirtyRaw {
-  return {
-    id: record.id,
-    list_id: record.fields.listId,
-    list_id_updated_at: record.clocks.listId,
-    title: record.fields.title,
-    title_updated_at: record.clocks.title,
-    description: record.fields.description ?? null,
-    description_updated_at: record.clocks.description,
-    position_idx: record.fields.positionIdx,
-    position_idx_updated_at: record.clocks.positionIdx,
-    is_complete: record.fields.isComplete,
-    is_complete_updated_at: record.clocks.isComplete,
-    node_id: record.nodeId,
-    deleted_at: record.deletedAt,
-    pending: record.pending,
-  };
+/** Copy a versioned card's fields onto a WatermelonDB model draft. */
+function assignCard(card: Card, record: LocalRecord<CardFields>): void {
+  card.listId = record.fields.listId;
+  card.listIdUpdatedAt = record.clocks.listId;
+  card.title = record.fields.title;
+  card.titleUpdatedAt = record.clocks.title;
+  card.description = record.fields.description;
+  card.descriptionUpdatedAt = record.clocks.description;
+  card.positionIdx = record.fields.positionIdx;
+  card.positionIdxUpdatedAt = record.clocks.positionIdx;
+  card.isComplete = record.fields.isComplete;
+  card.isCompleteUpdatedAt = record.clocks.isComplete;
+  card.nodeId = record.nodeId;
+  card.deletedAt = record.deletedAt;
+  card.pending = record.pending;
 }
 
 export class WatermelonCardStore implements LocalStore<CardFields> {
@@ -88,29 +84,19 @@ export class WatermelonCardStore implements LocalStore<CardFields> {
   }
 
   async put(record: LocalRecord<CardFields>): Promise<void> {
-    const raw = localRecordToRaw(record);
     await this.database.write(async () => {
       const existing = await this.collection.query(Q.where('id', record.id)).fetch();
       if (existing.length === 0) {
+        // prepareCreate + `_raw.id` runs the model-level setters (and schema
+        // type coercion) with our server-assigned id — the idiomatic sync path.
         await this.database.batch(
-          this.collection.prepareCreateFromDirtyRaw(raw),
+          this.collection.prepareCreate((card) => {
+            card._raw.id = record.id;
+            assignCard(card, record);
+          }),
         );
       } else {
-        await existing[0].update((card) => {
-          card.listId = record.fields.listId;
-          card.listIdUpdatedAt = record.clocks.listId;
-          card.title = record.fields.title;
-          card.titleUpdatedAt = record.clocks.title;
-          card.description = record.fields.description;
-          card.descriptionUpdatedAt = record.clocks.description;
-          card.positionIdx = record.fields.positionIdx;
-          card.positionIdxUpdatedAt = record.clocks.positionIdx;
-          card.isComplete = record.fields.isComplete;
-          card.isCompleteUpdatedAt = record.clocks.isComplete;
-          card.nodeId = record.nodeId;
-          card.deletedAt = record.deletedAt;
-          card.pending = record.pending;
-        });
+        await existing[0].update((card) => assignCard(card, record));
       }
     });
   }
@@ -156,24 +142,23 @@ export class WatermelonAttachmentStore implements UploadStore {
   }
 
   async put(record: AttachmentUpload): Promise<void> {
-    const raw: DirtyRaw = {
-      id: record.id,
-      card_id: record.cardId,
-      local_uri: record.localUri,
-      filename: record.filename,
-      mime_type: record.mimeType,
-      size_bytes: record.sizeBytes,
-      status: record.status,
-      attempts: record.attempts,
-      next_attempt_at: record.nextAttemptAt,
-      remote_url: record.remoteUrl ?? null,
-      last_error: record.lastError ?? null,
-    };
     await this.database.write(async () => {
       const existing = await this.collection.query(Q.where('id', record.id)).fetch();
       if (existing.length === 0) {
         await this.database.batch(
-          this.collection.prepareCreateFromDirtyRaw(raw),
+          this.collection.prepareCreate((row) => {
+            row._raw.id = record.id;
+            row.cardId = record.cardId;
+            row.localUri = record.localUri;
+            row.filename = record.filename;
+            row.mimeType = record.mimeType;
+            row.sizeBytes = record.sizeBytes;
+            row.status = record.status;
+            row.attempts = record.attempts;
+            row.nextAttemptAt = record.nextAttemptAt;
+            row.remoteUrl = record.remoteUrl ?? null;
+            row.lastError = record.lastError ?? null;
+          }),
         );
       } else {
         await existing[0].update((row) => {

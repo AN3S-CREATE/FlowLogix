@@ -5,7 +5,8 @@
   "description": "LogixFlow - collaborative Kanban board platform (NestJS backend + React frontend)",
   "workspaces": [
     "backend",
-    "frontend"
+    "frontend",
+    "mobile"
   ],
   "scripts": {
     "dev:backend": "npm run start:dev --workspace backend",
@@ -14,6 +15,8 @@
     "build:frontend": "npm run build --workspace frontend",
     "lint:backend": "npm run lint --workspace backend",
     "lint:frontend": "npm run lint --workspace frontend",
+    "test:mobile": "npm run test --workspace mobile",
+    "typecheck:mobile": "npm run typecheck --workspace mobile",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down"
   }

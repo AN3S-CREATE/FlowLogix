@@ -1,6 +1,6 @@
 import { HybridClock } from '../crdt/clock';
 import { mergeRecord } from '../crdt/mergeRecord';
-import { VersionedRecord } from '../crdt/types';
+import { FieldClocks, VersionedRecord } from '../crdt/types';
 import {
   CheckpointStore,
   CollectionName,
@@ -56,27 +56,44 @@ export class SyncEngine<F extends Record<string, unknown>> {
   }
 
   /**
-   * Apply a partial field update to a record, offline-first. Only the fields
-   * present in `patch` are re-stamped; untouched fields keep their old clocks so
-   * a later remote edit to them can still win. Creates the record if new.
+   * Create a new record with its **complete** initial field set, offline-first.
+   * Requiring the full `F` (rather than a partial patch) keeps the record
+   * type-safe — no field is ever left `undefined` for the storage layer to
+   * choke on. Every field is stamped with the same creation timestamp.
+   */
+  async create(id: string, fields: F): Promise<LocalRecord<F>> {
+    const now = this.clock.now();
+    const clocks = {} as FieldClocks<F>;
+    for (const key of Object.keys(fields) as (keyof F)[]) clocks[key] = now;
+
+    const record: LocalRecord<F> = {
+      id,
+      fields: { ...fields },
+      clocks,
+      nodeId: this.cfg.nodeId,
+      deletedAt: null,
+      pending: true,
+    };
+    await this.cfg.store.put(record);
+    return record;
+  }
+
+  /**
+   * Apply a partial field update to an existing record, offline-first. Only the
+   * fields in `patch` are re-stamped; untouched fields keep their old clocks so
+   * a later remote edit to them can still win. Throws if the record is unknown
+   * (use `create` first) so a partial patch can never produce a half-populated
+   * record.
    */
   async mutate(id: string, patch: Partial<F>): Promise<LocalRecord<F>> {
     const existing = await this.cfg.store.getById(id);
+    if (!existing) {
+      throw new Error(`mutate: record "${id}" does not exist — call create()`);
+    }
     const now = this.clock.now();
 
-    const base: LocalRecord<F> =
-      existing ??
-      ({
-        id,
-        fields: {} as F,
-        clocks: {} as Record<keyof F, number>,
-        nodeId: this.cfg.nodeId,
-        deletedAt: null,
-        pending: false,
-      } as LocalRecord<F>);
-
-    const fields = { ...base.fields };
-    const clocks = { ...base.clocks } as Record<keyof F, number>;
+    const fields = { ...existing.fields };
+    const clocks = { ...existing.clocks };
     for (const key of Object.keys(patch) as (keyof F)[]) {
       const value = patch[key];
       if (value === undefined) continue;
@@ -85,7 +102,7 @@ export class SyncEngine<F extends Record<string, unknown>> {
     }
 
     const updated: LocalRecord<F> = {
-      ...base,
+      ...existing,
       fields,
       clocks,
       nodeId: this.cfg.nodeId,
@@ -162,11 +179,15 @@ export class SyncEngine<F extends Record<string, unknown>> {
     }
 
     const { merged, changed } = mergeRecord(local, remote as VersionedRecord<F>);
-    if (!changed && !local.pending) return false;
 
     // Keep pushing our own edits until the server has acknowledged them. If the
     // merge preserved any locally-won field, we're still ahead of the server.
     const stillPending = local.pending && this.localIsAhead(local, remote);
+
+    // Nothing changed and the pending flag is unchanged -> the record is
+    // byte-identical; skip the (expensive on mobile) redundant write.
+    if (!changed && stillPending === local.pending) return false;
+
     await this.cfg.store.put({ ...merged, pending: stillPending });
     return changed;
   }
@@ -265,9 +286,19 @@ export class SyncService {
   start(): void {
     if (this.unsubscribe) return;
     this.unsubscribe = this.network.subscribe((online) => {
-      if (online) void this.syncAll();
+      if (online) this.runSync();
     });
-    if (this.network.isOnline()) void this.syncAll();
+    if (this.network.isOnline()) this.runSync();
+  }
+
+  /** Fire a background sync, swallowing errors so they never become an
+   * unhandled rejection (which crashes RN) — a failed sync just retries next
+   * time connectivity changes. */
+  private runSync(): void {
+    this.syncAll().catch((err) => {
+      // eslint-disable-next-line no-console
+      console.error('LogixFlow sync failed', err);
+    });
   }
 
   stop(): void {

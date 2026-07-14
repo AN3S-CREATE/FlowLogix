@@ -37,10 +37,21 @@ yet. Notable gaps between the rules and the current code:
   pattern-subscribes and fans frames out to the matching room, with an org
   ownership check on join and a Redis-backed replay log for reconnect
   delta-sync. The client half is `frontend/src/realtime/boardSocketManager.ts`.
-- **Frontend / mobile.** The React SPA is a minimal scaffold; the Zustand
-  optimistic-update, brand palette, and React Native / WatermelonDB pieces
-  described in the rules are still outstanding (the branded board UI and the
-  socket manager exist; store wiring of live frames is the next step).
+- **Frontend.** The React SPA is a minimal scaffold; the Zustand
+  optimistic-update, brand palette pieces described in the rules are largely in
+  place (the branded board UI and the socket manager exist; store wiring of live
+  frames is the next step).
+- **Mobile offline-first sync.** Implemented in the `mobile/` workspace
+  (`mobile/src/`). `crdt/` holds the LWW-CRDT primitives — a strictly-monotonic
+  high-precision clock, an LWW register, an LWW-Element-Set, and a field-level
+  `mergeRecord` keyed on `<field>_updated_at`. `sync/` is the offline-first
+  `SyncService`: mutations write straight to local SQLite and stamp per-field
+  clocks; on reconnect it pulls, merges field-by-field, and pushes pending
+  changes. `attachments/` is a background upload queue that stages large files
+  locally and uploads only on Wi-Fi/LTE, with bounded concurrency and backoff.
+  `model/` has the WatermelonDB schema/models (per-field `*_updated_at` columns)
+  and the port adapters. Pure logic is unit-tested with vitest (32 tests); the
+  React Native UI and native SQLite/NetInfo wiring live behind injectable ports.
 
 When you implement any of the above, follow `.cursorrules` and update this
 status list.
