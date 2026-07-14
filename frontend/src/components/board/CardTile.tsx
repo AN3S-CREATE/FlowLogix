@@ -51,7 +51,7 @@ export function CardTile({ card, isDragging, dragHandleProps }: CardTileProps) {
           {/* Drag handle — lime on hover/active, per brand spec. */}
           <button
             type="button"
-            aria-label="Drag card"
+            aria-label={`Drag card, ${PRIORITY_LABEL[card.priority]}`}
             title={PRIORITY_LABEL[card.priority]}
             className="mt-0.5 flex-none cursor-grab text-veralogix-charcoal/30 transition-colors hover:text-veralogix-lime active:cursor-grabbing focus:outline-none focus-visible:text-veralogix-lime"
             {...dragHandleProps}

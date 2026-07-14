@@ -3,7 +3,6 @@ import { Draggable, Droppable } from '@hello-pangea/dnd';
 import { Card, List } from '../../store/types';
 import { useBoardStore } from '../../store/useBoardStore';
 import { CardTile } from './CardTile';
-import { VERALOGIX } from '../../brand/colors';
 
 interface BoardColumnProps {
   list: List;
@@ -38,17 +37,14 @@ export function BoardColumn({ list }: BoardColumnProps) {
           <div
             ref={provided.innerRef}
             {...provided.droppableProps}
-            className={
-              'flex-1 space-y-2 overflow-y-auto rounded-lg px-2 py-2 transition-colors ' +
-              (snapshot.isDraggingOver ? 'bg-veralogix-lime/5' : '')
-            }
             // Active placeholder highlight: a 2px solid lime boundary on the
             // drop target while a card hovers over it.
-            style={{
-              border: snapshot.isDraggingOver
-                ? `2px solid ${VERALOGIX.lime}`
-                : '2px solid transparent',
-            }}
+            className={
+              'flex-1 space-y-2 overflow-y-auto rounded-lg border-2 px-2 py-2 transition-colors ' +
+              (snapshot.isDraggingOver
+                ? 'border-veralogix-lime bg-veralogix-lime/5'
+                : 'border-transparent')
+            }
           >
             {/*
               Draggable indices must be consecutive integers starting at 0, so
@@ -110,6 +106,7 @@ export function BoardColumn({ list }: BoardColumnProps) {
               }}
               rows={2}
               placeholder="Card title…"
+              aria-label="Card title"
               className="w-full resize-none rounded-md border border-veralogix-charcoal/10 p-2 text-sm text-veralogix-charcoal placeholder:text-veralogix-charcoal/40 focus:border-veralogix-lime focus:outline-none focus:ring-2 focus:ring-veralogix-lime/40"
             />
             <div className="mt-2 flex items-center gap-2">
