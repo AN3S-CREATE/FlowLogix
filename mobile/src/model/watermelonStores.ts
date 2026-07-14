@@ -175,7 +175,9 @@ export class WatermelonAttachmentStore implements UploadStore {
   async remove(id: string): Promise<void> {
     await this.database.write(async () => {
       const rows = await this.collection.query(Q.where('id', id)).fetch();
-      if (rows.length > 0) await rows[0].markAsDeleted();
+      // This is a local-only queue table (never WatermelonDB-synced), so delete
+      // outright — markAsDeleted would leave a tombstone that accumulates forever.
+      if (rows.length > 0) await rows[0].destroyPermanently();
     });
   }
 }

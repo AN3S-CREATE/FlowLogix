@@ -149,32 +149,48 @@ export class AttachmentUploadQueue {
     }
   }
 
-  /** Run up to `maxConcurrent` workers; each pulls the next item until dry. */
+  /**
+   * One pass over the queue. We fetch the runnable set **once** (not once per
+   * worker), then let up to `maxConcurrent` workers pull from that shared list
+   * via a cursor — so there's no per-worker DB query storm, yet a worker still
+   * grabs the next item the instant it frees up (no batch barrier). Items that
+   * become runnable mid-pass are picked up by the next pass (`process`'s rerun
+   * loop, or a backoff/network kick).
+   */
   private async drainOnce(): Promise<void> {
-    const workerCount = Math.max(1, this.cfg.maxConcurrent);
-    await Promise.all(
-      Array.from({ length: workerCount }, () => this.worker()),
-    );
-  }
+    if (this.stopped || !isSuitableForLargeUpload(this.cfg.network)) return;
 
-  private async worker(): Promise<void> {
-    for (;;) {
-      if (this.stopped || !isSuitableForLargeUpload(this.cfg.network)) return;
-      const runnable = await this.cfg.store.listRunnable(this.cfg.now());
-      // Only auto-run queued items; `failed` is terminal. Claim synchronously
-      // (no await between the find and the `inFlight.add`) so two workers can't
-      // grab the same item.
-      const next = runnable.find(
-        (r) => r.status === 'queued' && !this.inFlight.has(r.id),
-      );
-      if (!next) return;
-      this.inFlight.add(next.id);
-      try {
-        await this.runClaimed(next);
-      } finally {
-        this.inFlight.delete(next.id);
+    const runnable = (await this.cfg.store.listRunnable(this.cfg.now())).filter(
+      (r) => r.status === 'queued' && !this.inFlight.has(r.id),
+    );
+    if (runnable.length === 0) return;
+
+    let cursor = 0;
+    const worker = async (): Promise<void> => {
+      for (;;) {
+        if (this.stopped || !isSuitableForLargeUpload(this.cfg.network)) return;
+        // Claim the next unclaimed item synchronously (no await between the read
+        // of `cursor`/`inFlight` and the `add`) so two workers can't take one.
+        let next: AttachmentUpload | undefined;
+        while (cursor < runnable.length) {
+          const candidate = runnable[cursor++];
+          if (!this.inFlight.has(candidate.id)) {
+            next = candidate;
+            break;
+          }
+        }
+        if (!next) return;
+        this.inFlight.add(next.id);
+        try {
+          await this.runClaimed(next);
+        } finally {
+          this.inFlight.delete(next.id);
+        }
       }
-    }
+    };
+
+    const workerCount = Math.min(runnable.length, Math.max(1, this.cfg.maxConcurrent));
+    await Promise.all(Array.from({ length: workerCount }, () => worker()));
   }
 
   private async runClaimed(record: AttachmentUpload): Promise<void> {

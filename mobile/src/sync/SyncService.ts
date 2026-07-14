@@ -254,6 +254,8 @@ export class SyncEngine<F extends Record<string, unknown>> {
 export class SyncService {
   private readonly engines: Record<CollectionName, SyncEngine<never>>;
   private unsubscribe: (() => void) | null = null;
+  /** Re-entrancy guard: only one full sync runs at a time. */
+  private syncing = false;
 
   constructor(
     private readonly network: NetworkMonitor,
@@ -272,14 +274,25 @@ export class SyncService {
     return this.engines[c] as unknown as SyncEngine<F>;
   }
 
-  /** Sync every collection once (order: boards -> lists -> cards for FK sanity). */
+  /**
+   * Sync every collection once (order: boards -> lists -> cards for FK sanity).
+   * Re-entrant calls (overlapping network events or manual triggers) are
+   * dropped while a sync is in flight, so we never issue concurrent write
+   * transactions (SQLite-busy errors) or duplicate pushes.
+   */
   async syncAll(): Promise<SyncReport[]> {
-    const order: CollectionName[] = ['boards', 'lists', 'cards'];
-    const reports: SyncReport[] = [];
-    for (const c of order) {
-      reports.push(await this.engines[c].sync());
+    if (this.syncing) return [];
+    this.syncing = true;
+    try {
+      const order: CollectionName[] = ['boards', 'lists', 'cards'];
+      const reports: SyncReport[] = [];
+      for (const c of order) {
+        reports.push(await this.engines[c].sync());
+      }
+      return reports;
+    } finally {
+      this.syncing = false;
     }
-    return reports;
   }
 
   /** Auto-sync whenever connectivity is (re)gained. */
