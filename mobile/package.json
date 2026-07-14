@@ -1,0 +1,19 @@
+{
+  "name": "logixflow-mobile",
+  "private": true,
+  "version": "0.1.0",
+  "description": "LogixFlow React Native mobile app — offline-first WatermelonDB + LWW-CRDT sync",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@nozbe/watermelondb": "^0.27.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.2",
+    "vitest": "^2.1.4"
+  }
+}
