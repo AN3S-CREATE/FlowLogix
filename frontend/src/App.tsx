@@ -1,13 +1,15 @@
-import { Board } from './components/Board';
+import { AppHeader } from './components/board/AppHeader';
+import { Board } from './components/board/Board';
 
+/**
+ * LogixFlow shell — the charcoal corporate header over the cool-grey board
+ * canvas, per the Veralogix brand standards.
+ */
 function App() {
   return (
-    <div className="min-h-screen bg-slate-100">
-      <header className="border-b border-slate-200 bg-white px-6 py-4">
-        <h1 className="text-xl font-semibold text-slate-900">LogixFlow</h1>
-        <p className="text-sm text-slate-500">Collaborative Kanban board</p>
-      </header>
-      <main className="p-6">
+    <div className="flex h-screen flex-col bg-veralogix-grey">
+      <AppHeader />
+      <main className="flex-1 overflow-hidden pt-6">
         <Board />
       </main>
     </div>
