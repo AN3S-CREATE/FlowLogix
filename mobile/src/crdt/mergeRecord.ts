@@ -14,20 +14,25 @@ export interface MergeResult<F extends Record<string, unknown>> {
 
 /**
  * Merge two versions of the same record field-by-field using their
- * `<field>_updated_at` clocks. For each field the value with the later clock is
- * kept; an exact clock tie is broken by the record's `nodeId` (deterministic,
- * so all replicas converge).
+ * `<field>_updated_at` clocks. For each field the value with the later clock
+ * wins; on an exact clock tie the winner is the **greater value** under a stable
+ * comparison.
  *
- * Deletion is an LWW tombstone (`deletedAt`) that is itself merged by keeping
- * the later stamp, but *visibility* is derived by comparing that stamp against
- * the record's newest field write (see `isDeleted`). So a field edit newer than
- * the delete resurrects the record, and a delete newer than every field write
- * buries it — matching the "latest edit wins" rule end-to-end. (The tradeoff:
- * an offline edit to a card another device deleted will resurrect it; that's
- * the intended LWW semantics, not a bug.)
+ * The tie-break deliberately does NOT consult any record-level metadata (like a
+ * mutable `nodeId`): since each device runs the merge with its own copy as
+ * `local`, a tie-break that depended on a mutable, whole-record field could make
+ * two replicas disagree on an old field whose origin differs from the record's
+ * latest writer — breaking convergence. Comparing the values themselves is a
+ * total, order-independent function of the two inputs alone, so every replica
+ * converges regardless of merge order. `nodeId` is carried only as a
+ * "last writer" annotation and never feeds the merge.
  *
- * This is intentionally pure — no I/O — so it can be unit-tested exhaustively
- * and reused on either side of the wire.
+ * Deletion is an LWW tombstone (`deletedAt`) merged by keeping the later stamp;
+ * visibility is derived against the newest field write (see `isDeleted`), so a
+ * later edit resurrects and a later delete buries.
+ *
+ * Pure — no I/O — so it can be unit-tested exhaustively and reused on either
+ * side of the wire.
  */
 export function mergeRecord<F extends Record<string, unknown>>(
   local: VersionedRecord<F>,
@@ -52,7 +57,12 @@ export function mergeRecord<F extends Record<string, unknown>>(
   for (const key of keys) {
     const lClock = local.clocks[key] ?? 0;
     const rClock = remote.clocks[key] ?? 0;
-    const winner = pickSide(lClock, local.nodeId, rClock, remote.nodeId);
+    const winner = pickField(
+      lClock,
+      local.fields[key],
+      rClock,
+      remote.fields[key],
+    );
     report[key] = winner;
 
     if (winner === 'remote') {
@@ -65,20 +75,16 @@ export function mergeRecord<F extends Record<string, unknown>>(
     }
   }
 
-  // Deletion register: compare the two deletedAt stamps the same way.
+  // Deletion register: later stamp wins (a tie keeps whichever is non-null).
   const deletedAt = mergeDeletion(local, remote);
   if (deletedAt !== local.deletedAt) changed = true;
 
-  const merged: VersionedRecord<F> = {
-    id: local.id,
-    fields,
-    clocks,
-    // The surviving nodeId is whichever side supplied the newest field write;
-    // if nothing changed we keep local's.
-    nodeId: changed ? newestNode(local, remote) : local.nodeId,
-    deletedAt,
-  };
+  // `nodeId` is annotation only (not a merge input). Converge it deterministically
+  // to the newest writer's id so both replicas agree; flag a change if it moves.
+  const nodeId = newestNode(local, remote);
+  if (nodeId !== local.nodeId) changed = true;
 
+  const merged: VersionedRecord<F> = { id: local.id, fields, clocks, nodeId, deletedAt };
   return { merged, report, changed };
 }
 
@@ -101,6 +107,30 @@ export function isDeleted<F extends Record<string, unknown>>(
   return record.deletedAt !== null && record.deletedAt >= maxFieldClock(record);
 }
 
+/**
+ * Field winner by clock, then by a stable value comparison on an exact tie.
+ * `>= 0` keeps local, so both replicas (which swap local/remote) still pick the
+ * lexicographically-greater value — a total, order-independent choice.
+ */
+function pickField(
+  lClock: number,
+  lValue: unknown,
+  rClock: number,
+  rValue: unknown,
+): 'local' | 'remote' | 'equal' {
+  if (lClock !== rClock) return lClock > rClock ? 'local' : 'remote';
+  const cmp = compareValues(lValue, rValue);
+  if (cmp === 0) return 'equal';
+  return cmp > 0 ? 'local' : 'remote';
+}
+
+/** Total order over arbitrary field values via canonical JSON. */
+function compareValues(a: unknown, b: unknown): number {
+  const sa = JSON.stringify(a ?? null) ?? 'null';
+  const sb = JSON.stringify(b ?? null) ?? 'null';
+  return sa < sb ? -1 : sa > sb ? 1 : 0;
+}
+
 /** LWW on the deletion register; null (alive) vs a stamp (deleted). */
 function mergeDeletion<F extends Record<string, unknown>>(
   local: VersionedRecord<F>,
@@ -108,29 +138,16 @@ function mergeDeletion<F extends Record<string, unknown>>(
 ): number | null {
   const l = local.deletedAt ?? 0;
   const r = remote.deletedAt ?? 0;
-  const winner = pickSide(l, local.nodeId, r, remote.nodeId);
-  const chosen = winner === 'remote' ? remote.deletedAt : local.deletedAt;
-  return chosen ?? null;
-}
-
-/** 'local' | 'remote' | 'equal' under the LWW + node tie-break rule. */
-function pickSide(
-  lClock: number,
-  lNode: string,
-  rClock: number,
-  rNode: string,
-): 'local' | 'remote' | 'equal' {
-  if (lClock !== rClock) return lClock > rClock ? 'local' : 'remote';
-  if (lNode !== rNode) return lNode > rNode ? 'local' : 'remote';
-  return 'equal';
+  if (l === r) return local.deletedAt ?? remote.deletedAt ?? null;
+  return l > r ? local.deletedAt : remote.deletedAt;
 }
 
 function newestNode<F extends Record<string, unknown>>(
   local: VersionedRecord<F>,
   remote: VersionedRecord<F>,
 ): string {
-  const lMax = Math.max(0, ...Object.values(local.clocks));
-  const rMax = Math.max(0, ...Object.values(remote.clocks));
+  const lMax = maxFieldClock(local);
+  const rMax = maxFieldClock(remote);
   if (lMax !== rMax) return lMax > rMax ? local.nodeId : remote.nodeId;
   return local.nodeId > remote.nodeId ? local.nodeId : remote.nodeId;
 }
