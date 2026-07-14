@@ -3,11 +3,6 @@ import { BoardSummary, Card, Id, List, Member } from './types';
 import { seedBoard, seedCards, seedLists, seedMembers } from './seed';
 import { persistCardMove } from './persistence';
 
-/** Immutable snapshot of the ordering used to roll a failed move back. */
-interface ListsSnapshot {
-  lists: List[];
-}
-
 interface BoardSlice {
   board: BoardSummary;
   lists: List[];
@@ -42,10 +37,6 @@ interface UiSlice {
 
 export type BoardStore = BoardSlice & MembersSlice & UiSlice;
 
-const snapshot = (lists: List[]): ListsSnapshot => ({
-  lists: lists.map((l) => ({ ...l, cardIds: [...l.cardIds] })),
-});
-
 const createId = (): string =>
   typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
     ? crypto.randomUUID()
@@ -71,6 +62,8 @@ export const useBoardStore = create<BoardStore>((set, get) => ({
     set((state) => {
       const trimmed = title.trim();
       if (!trimmed) return state;
+      // Never orphan a card against a list that no longer exists.
+      if (!state.lists.some((l) => l.id === listId)) return state;
       const id = createId();
       const card: Card = {
         id,
@@ -99,7 +92,11 @@ export const useBoardStore = create<BoardStore>((set, get) => ({
     }),
 
   moveCard: async (cardId, fromListId, toListId, toIndex) => {
-    const before = snapshot(get().lists);
+    // Remember only where *this* card came from, so a failed persist reverts
+    // just this move — a global snapshot would clobber other concurrent moves.
+    const fromBefore = get().lists.find((l) => l.id === fromListId);
+    const originalIndex = fromBefore ? fromBefore.cardIds.indexOf(cardId) : -1;
+    if (originalIndex === -1) return;
 
     // Optimistic update — render the card in the target position immediately.
     set((state) => {
@@ -117,10 +114,22 @@ export const useBoardStore = create<BoardStore>((set, get) => ({
     try {
       await persistCardMove({ cardId, fromListId, toListId, toIndex });
     } catch (err) {
-      // Roll the optimistic change back and surface the failure.
-      set({
-        lists: before.lists,
-        moveError: err instanceof Error ? err.message : 'Move failed',
+      // Targeted rollback: pull the card back out of the target list and drop
+      // it at its original index, leaving any other cards' moves untouched.
+      set((state) => {
+        const lists = state.lists.map((l) => ({ ...l, cardIds: [...l.cardIds] }));
+        const from = lists.find((l) => l.id === fromListId);
+        const to = lists.find((l) => l.id === toListId);
+        if (!from || !to) return state;
+        const currentIndex = to.cardIds.indexOf(cardId);
+        if (currentIndex !== -1) {
+          to.cardIds.splice(currentIndex, 1);
+          from.cardIds.splice(originalIndex, 0, cardId);
+        }
+        return {
+          lists,
+          moveError: err instanceof Error ? err.message : 'Move failed',
+        };
       });
     }
   },

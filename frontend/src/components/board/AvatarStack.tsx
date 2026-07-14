@@ -12,14 +12,16 @@ interface AvatarStackProps {
 /** Overlapping stack of BrandedAvatars for a card's assignees or a board's members. */
 export function AvatarStack({ memberIds, size = 28, ring = false, max = 4 }: AvatarStackProps) {
   const members = useBoardStore((s) => s.members);
-  const shown = memberIds.slice(0, max);
-  const overflow = memberIds.length - shown.length;
+  // Drop unknown ids first so the first avatar keeps index 0 (its marginLeft
+  // must be 0, not negative) and the +N overflow count stays accurate.
+  const validIds = memberIds.filter((id) => Boolean(members[id]));
+  const shown = validIds.slice(0, max);
+  const overflow = validIds.length - shown.length;
 
   return (
     <div className="flex items-center">
       {shown.map((id, i) => {
         const m = members[id];
-        if (!m) return null;
         return (
           <div
             key={id}
