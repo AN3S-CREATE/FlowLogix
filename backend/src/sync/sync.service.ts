@@ -1,6 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
-import { DataSource, EntityManager } from 'typeorm';
+import {
+  DataSource,
+  EntityManager,
+  EntityTarget,
+  ObjectLiteral,
+} from 'typeorm';
+import { QueryDeepPartialEntity } from 'typeorm/query-builder/QueryPartialEntity';
 import { Board } from '../boards/board.entity';
 import { List } from '../lists/list.entity';
 import { Card } from '../cards/card.entity';
@@ -21,6 +27,8 @@ type SyncRow = {
 } & Record<string, unknown>;
 
 interface CollectionStrategy {
+  /** The entity, used both to load and to issue a targeted partial update. */
+  readonly entity: EntityTarget<ObjectLiteral>;
   /** Entity property names that participate in field-level LWW. */
   readonly syncFields: readonly string[];
   /** Load a record scoped to the org (via the board-ownership chain), or null. */
@@ -54,6 +62,7 @@ export class SyncService {
 
   private readonly strategies: Record<SyncCollection, CollectionStrategy> = {
     boards: {
+      entity: Board,
       syncFields: ['title'],
       load: (manager, id, orgId) =>
         manager.findOne(Board, {
@@ -61,6 +70,7 @@ export class SyncService {
         }) as Promise<SyncRow | null>,
     },
     lists: {
+      entity: List,
       syncFields: ['title'],
       load: (manager, id, orgId) =>
         manager.findOne(List, {
@@ -69,6 +79,7 @@ export class SyncService {
         }) as Promise<SyncRow | null>,
     },
     cards: {
+      entity: Card,
       syncFields: ['title', 'description', 'isComplete'],
       load: (manager, id, orgId) =>
         manager.findOne(Card, {
@@ -101,7 +112,7 @@ export class SyncService {
         };
         const client: RecordState = {
           fields: this.filter(change.fields, strategy.syncFields),
-          clocks: this.filter(change.clocks, strategy.syncFields),
+          clocks: this.numericClocks(change.clocks, strategy.syncFields),
           nodeId: change.nodeId,
           deletedAt: change.deletedAt,
         };
@@ -109,13 +120,22 @@ export class SyncService {
         const result = mergeServerRecord(server, client);
 
         if (result.serverChanged) {
+          // Targeted update of only the sync columns: writing the whole entity
+          // back (save) would clobber any non-sync column (positionIdx, dueDate,
+          // isArchived, ...) a concurrent CRUD write changed after we loaded it.
+          const patch: Record<string, unknown> = {
+            syncClocks: result.merged.clocks,
+            nodeId: result.merged.nodeId,
+            syncDeletedAt: result.merged.deletedAt,
+          };
           for (const field of strategy.syncFields) {
-            row[field] = result.merged.fields[field];
+            patch[field] = result.merged.fields[field];
           }
-          row.syncClocks = result.merged.clocks;
-          row.nodeId = result.merged.nodeId;
-          row.syncDeletedAt = result.merged.deletedAt;
-          await manager.save(row);
+          await manager.update(
+            strategy.entity,
+            change.id,
+            patch as QueryDeepPartialEntity<ObjectLiteral>,
+          );
         }
 
         if (result.clientAccepted) acceptedIds.push(change.id);
@@ -153,6 +173,26 @@ export class SyncService {
     for (const field of fields) {
       if (Object.prototype.hasOwnProperty.call(source, field)) {
         out[field] = source[field];
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Sanitize the client's clocks: keep only synced keys whose value is a finite
+   * number. `clocks` arrives as an unvalidated JSON object, so a malformed or
+   * hostile payload (a string, NaN, Infinity) must never reach the LWW
+   * comparison — a bad clock would otherwise skew every merge for that record.
+   */
+  private numericClocks(
+    source: Record<string, unknown>,
+    fields: readonly string[],
+  ): Record<string, number> {
+    const out: Record<string, number> = {};
+    for (const field of fields) {
+      const value = source[field];
+      if (typeof value === 'number' && Number.isFinite(value)) {
+        out[field] = value;
       }
     }
     return out;

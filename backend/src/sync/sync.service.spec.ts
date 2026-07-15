@@ -1,15 +1,16 @@
 import { DataSource, EntityManager } from 'typeorm';
 import { SyncService } from './sync.service';
 import { SyncRequestDto } from './dto/sync.dto';
+import { Card } from '../cards/card.entity';
 
 interface FakeManager {
   findOne: jest.Mock;
-  save: jest.Mock;
+  update: jest.Mock;
 }
 
 function makeService(manager: FakeManager): {
   service: SyncService;
-  save: jest.Mock;
+  update: jest.Mock;
 } {
   const queryRunner = {
     connect: jest.fn().mockResolvedValue(undefined),
@@ -24,7 +25,7 @@ function makeService(manager: FakeManager): {
   const dataSource = {
     createQueryRunner: () => queryRunner,
   } as unknown as DataSource;
-  return { service: new SyncService(dataSource), save: manager.save };
+  return { service: new SyncService(dataSource), update: manager.update };
 }
 
 const cardRow = () => ({
@@ -41,13 +42,12 @@ function req(change: SyncRequestDto['changes'][number]): SyncRequestDto {
 }
 
 describe('SyncService', () => {
-  it('applies a client-newer field, persists it, and accepts the id', async () => {
-    const row = cardRow();
+  it('applies a client-newer field via a targeted update, and accepts the id', async () => {
     const manager: FakeManager = {
-      findOne: jest.fn().mockResolvedValue(row),
-      save: jest.fn().mockResolvedValue(undefined),
+      findOne: jest.fn().mockResolvedValue(cardRow()),
+      update: jest.fn().mockResolvedValue({ affected: 1 }),
     };
-    const { service, save } = makeService(manager);
+    const { service, update } = makeService(manager);
 
     const res = await service.sync(
       'org-1',
@@ -64,22 +64,26 @@ describe('SyncService', () => {
       }),
     );
 
-    expect(save).toHaveBeenCalledTimes(1);
-    expect(row.title).toBe('client'); // 300 > 100
-    expect(row.syncClocks.title).toBe(300);
+    expect(update).toHaveBeenCalledTimes(1);
+    const [target, id, patch] = update.mock.calls[0];
+    expect(target).toBe(Card); // targeted at the entity, only sync columns
+    expect(id).toBe('c1');
+    expect(patch.title).toBe('client'); // 300 > 100
+    expect(patch.syncClocks.title).toBe(300);
+    expect(patch).not.toHaveProperty('positionIdx'); // non-sync columns untouched
     expect(res.acceptedIds).toEqual(['c1']);
     expect(res.changes).toHaveLength(0); // server had nothing newer
     expect(res.checkpoint).toBeGreaterThan(0);
   });
 
-  it('echoes a server-newer field back without persisting or accepting', async () => {
+  it('echoes a server-newer field back without updating or accepting', async () => {
     const row = cardRow();
     row.syncClocks = { title: 500, description: 100, isComplete: 100 };
     const manager: FakeManager = {
       findOne: jest.fn().mockResolvedValue(row),
-      save: jest.fn().mockResolvedValue(undefined),
+      update: jest.fn().mockResolvedValue({ affected: 0 }),
     };
-    const { service, save } = makeService(manager);
+    const { service, update } = makeService(manager);
 
     const res = await service.sync(
       'org-1',
@@ -96,18 +100,50 @@ describe('SyncService', () => {
       }),
     );
 
-    expect(save).not.toHaveBeenCalled();
+    expect(update).not.toHaveBeenCalled();
     expect(res.acceptedIds).toEqual([]);
     expect(res.changes).toHaveLength(1);
     expect(res.changes[0].fields.title).toBe('server'); // 500 > 200
   });
 
+  it('ignores a non-numeric client clock (treats it as absent → server wins)', async () => {
+    const manager: FakeManager = {
+      findOne: jest.fn().mockResolvedValue(cardRow()),
+      update: jest.fn().mockResolvedValue({ affected: 0 }),
+    };
+    const { service, update } = makeService(manager);
+
+    const res = await service.sync(
+      'org-1',
+      req({
+        id: 'c1',
+        fields: {
+          title: 'client',
+          description: 'server desc',
+          isComplete: false,
+        },
+        // A hostile/malformed clock — must not win the merge.
+        clocks: {
+          title: 'not-a-number' as unknown as number,
+          description: 100,
+          isComplete: 100,
+        },
+        nodeId: 'client-node',
+        deletedAt: null,
+      }),
+    );
+
+    expect(update).not.toHaveBeenCalled(); // client title clock treated as 0 < 100
+    expect(res.acceptedIds).toEqual([]);
+    expect(res.changes[0].fields.title).toBe('server');
+  });
+
   it('skips an unseen / out-of-org id (not accepted, no write)', async () => {
     const manager: FakeManager = {
       findOne: jest.fn().mockResolvedValue(null),
-      save: jest.fn().mockResolvedValue(undefined),
+      update: jest.fn().mockResolvedValue({ affected: 0 }),
     };
-    const { service, save } = makeService(manager);
+    const { service, update } = makeService(manager);
 
     const res = await service.sync(
       'org-1',
@@ -120,7 +156,7 @@ describe('SyncService', () => {
       }),
     );
 
-    expect(save).not.toHaveBeenCalled();
+    expect(update).not.toHaveBeenCalled();
     expect(res.acceptedIds).toEqual([]);
     expect(res.changes).toHaveLength(0);
   });
@@ -128,7 +164,7 @@ describe('SyncService', () => {
   it('produces a strictly-increasing checkpoint across calls', async () => {
     const manager: FakeManager = {
       findOne: jest.fn().mockResolvedValue(null),
-      save: jest.fn(),
+      update: jest.fn(),
     };
     const { service } = makeService(manager);
     const a = await service.sync('org-1', {
