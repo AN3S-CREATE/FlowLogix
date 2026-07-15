@@ -4,6 +4,7 @@ import { RedisPubSubService } from './redis-pubsub.service';
 import { BoardEventsService } from './board-events.service';
 import { RealtimeGateway } from './realtime.gateway';
 import { TenantModule } from '../common/tenant/tenant.module';
+import { HealthModule } from '../health/health.module';
 
 /**
  * Wires the real-time sync pipeline: the Redis Pub/Sub connections, the
@@ -12,7 +13,7 @@ import { TenantModule } from '../common/tenant/tenant.module';
  * ownership check the gateway runs when a socket joins a board.
  */
 @Module({
-  imports: [ConfigModule, TenantModule],
+  imports: [ConfigModule, TenantModule, HealthModule],
   providers: [RedisPubSubService, BoardEventsService, RealtimeGateway],
   exports: [BoardEventsService],
 })

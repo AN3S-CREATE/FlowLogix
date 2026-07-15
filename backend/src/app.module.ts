@@ -13,6 +13,8 @@ import { CardMembersModule } from './card-members/card-members.module';
 import { CommentsModule } from './comments/comments.module';
 import { RealtimeModule } from './realtime/realtime.module';
 import { SyncModule } from './sync/sync.module';
+import { SeedModule } from './seed/seed.module';
+import { HealthModule } from './health/health.module';
 
 @Module({
   imports: [
@@ -30,6 +32,8 @@ import { SyncModule } from './sync/sync.module';
     CommentsModule,
     RealtimeModule,
     SyncModule,
+    SeedModule,
+    HealthModule,
   ],
   controllers: [AppController],
   providers: [AppService],
