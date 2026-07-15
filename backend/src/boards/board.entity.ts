@@ -13,6 +13,7 @@ import { Organization } from '../organizations/organization.entity';
 import { User } from '../users/user.entity';
 import { List } from '../lists/list.entity';
 import { BoardMember } from '../board-members/board-member.entity';
+import { bigintToNumber } from '../common/bigint-number.transformer';
 
 export enum BoardVisibility {
   PRIVATE = 'private',
@@ -59,6 +60,21 @@ export class Board {
   @ManyToOne(() => User, { onDelete: 'SET NULL' })
   @JoinColumn({ name: 'created_by' })
   creator: User | null;
+
+  // --- CRDT sync metadata (mobile offline-first LWW; see sync/ module) ---
+  @Column({ name: 'sync_clocks', type: 'jsonb', default: {} })
+  syncClocks: Record<string, number> = {};
+
+  @Column({ name: 'node_id', type: 'varchar', length: 64, nullable: true })
+  nodeId: string | null = null;
+
+  @Column({
+    name: 'sync_deleted_at',
+    type: 'bigint',
+    nullable: true,
+    transformer: bigintToNumber,
+  })
+  syncDeletedAt: number | null = null;
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;

@@ -57,10 +57,21 @@ yet. Notable gaps between the rules and the current code:
   suitable (the `expo-task-manager` / `expo-background-task` surface is an
   injected `BackgroundTaskHost` port). `model/` has the WatermelonDB
   schema/models (per-field `*_updated_at` columns) and the port adapters. Pure
-  logic is unit-tested with vitest (44 tests); the React Native UI and native
-  SQLite/NetInfo/Expo wiring live behind injectable ports. **Not yet built:** the
-  server side of `/sync` — a NestJS endpoint doing field-level LWW against the
-  PostgreSQL master (needs per-field CRDT clocks added to `boards`/`lists`/`cards`).
+  logic is unit-tested with vitest (46 tests); the React Native UI and native
+  SQLite/NetInfo/Expo wiring live behind injectable ports.
+- **Server `/sync` endpoint.** Implemented in `backend/src/sync/`. `sync-merge.ts`
+  is the master half of the mobile `mergeRecord` — a pure field-level LWW merge
+  (later clock wins; exact ties broken by greater canonical-JSON value, identical
+  to the client so both converge; deletion is an LWW tombstone). `SyncService`
+  runs it per record inside a tenant transaction, and `SyncController` exposes
+  `POST /sync` (tenant from the `X-Org-Id` header). The master carries per-record
+  CRDT metadata via the `AddSyncClocks` migration — additive `sync_clocks` (jsonb
+  `<field>→epoch-µs`), `node_id`, and `sync_deleted_at` columns on
+  `boards`/`lists`/`cards`, mapped on the entities (`bigintToNumber` transformer).
+  Jest-tested (mocked DataSource). **v1 scope:** merges *content* fields
+  (`title`/`description`/`isComplete`) of existing records; `position_idx` and
+  parent-move sync wait on the `FractionalIndexer` column migration, and
+  first-time inserts of offline-created records still go through the CRUD routes.
 
 When you implement any of the above, follow `.cursorrules` and update this
 status list.

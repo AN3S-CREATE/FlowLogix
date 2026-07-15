@@ -12,6 +12,7 @@ import {
 import { List } from '../lists/list.entity';
 import { Comment } from '../comments/comment.entity';
 import { CardMember } from '../card-members/card-member.entity';
+import { bigintToNumber } from '../common/bigint-number.transformer';
 
 @Entity({ name: 'cards' })
 export class Card {
@@ -46,6 +47,21 @@ export class Card {
 
   @Column({ name: 'custom_fields', type: 'jsonb', default: {} })
   customFields: Record<string, unknown> = {};
+
+  // --- CRDT sync metadata (mobile offline-first LWW; see sync/ module) ---
+  @Column({ name: 'sync_clocks', type: 'jsonb', default: {} })
+  syncClocks: Record<string, number> = {};
+
+  @Column({ name: 'node_id', type: 'varchar', length: 64, nullable: true })
+  nodeId: string | null = null;
+
+  @Column({
+    name: 'sync_deleted_at',
+    type: 'bigint',
+    nullable: true,
+    transformer: bigintToNumber,
+  })
+  syncDeletedAt: number | null = null;
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;
