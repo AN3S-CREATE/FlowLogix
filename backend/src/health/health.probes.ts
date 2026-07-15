@@ -37,23 +37,28 @@ const numericInfoField = (info: string, field: string): number | undefined => {
 /** Redis: memory load and connection metrics from `INFO`. */
 @Injectable()
 export class RedisProbe implements HealthProbe, OnModuleDestroy {
-  private client: RedisClientType | null = null;
+  // Cache the connection *promise*, not the resolved client, so concurrent
+  // `check()` calls share a single connect() instead of each opening (and
+  // leaking) their own socket.
+  private clientPromise: Promise<RedisClientType> | null = null;
 
-  private async getClient(): Promise<RedisClientType> {
-    if (!this.client) {
-      const client: RedisClientType = createClient({
-        socket: {
-          host: process.env.REDIS_HOST ?? 'localhost',
-          port: Number(process.env.REDIS_PORT ?? 6379),
-          reconnectStrategy: false,
-        },
-      });
-      // Swallow async errors; `check()` reports connectivity via its result.
-      client.on('error', () => undefined);
-      await client.connect();
-      this.client = client;
+  private getClient(): Promise<RedisClientType> {
+    if (!this.clientPromise) {
+      this.clientPromise = (async () => {
+        const client: RedisClientType = createClient({
+          socket: {
+            host: process.env.REDIS_HOST ?? 'localhost',
+            port: Number(process.env.REDIS_PORT ?? 6379),
+            reconnectStrategy: false,
+          },
+        });
+        // Swallow async errors; `check()` reports connectivity via its result.
+        client.on('error', () => undefined);
+        await client.connect();
+        return client;
+      })();
     }
-    return this.client;
+    return this.clientPromise;
   }
 
   async check(): Promise<ProbeResult> {
@@ -84,12 +89,15 @@ export class RedisProbe implements HealthProbe, OnModuleDestroy {
   }
 
   private async reset(): Promise<void> {
+    const promise = this.clientPromise;
+    this.clientPromise = null;
+    if (!promise) return;
     try {
-      await this.client?.quit();
+      const client = await promise;
+      await client.quit();
     } catch {
-      // ignore — we're discarding the client anyway
+      // ignore — the connection failed or we're discarding it anyway
     }
-    this.client = null;
   }
 
   async onModuleDestroy(): Promise<void> {
@@ -100,18 +108,19 @@ export class RedisProbe implements HealthProbe, OnModuleDestroy {
 /** MongoDB: connection health and active replica-set status via `hello`. */
 @Injectable()
 export class MongoProbe implements HealthProbe, OnModuleDestroy {
-  private client: MongoClient | null = null;
+  // Cache the connection *promise* (see RedisProbe) so concurrent `check()`
+  // calls share one connect() rather than each leaking a MongoClient.
+  private clientPromise: Promise<MongoClient> | null = null;
 
-  private async getClient(): Promise<MongoClient> {
-    if (!this.client) {
+  private getClient(): Promise<MongoClient> {
+    if (!this.clientPromise) {
       const client = new MongoClient(
         process.env.MONGO_URI ?? 'mongodb://localhost:27017',
         { serverSelectionTimeoutMS: 2000 },
       );
-      await client.connect();
-      this.client = client;
+      this.clientPromise = client.connect();
     }
-    return this.client;
+    return this.clientPromise;
   }
 
   async check(): Promise<ProbeResult> {
@@ -142,12 +151,15 @@ export class MongoProbe implements HealthProbe, OnModuleDestroy {
   }
 
   private async reset(): Promise<void> {
+    const promise = this.clientPromise;
+    this.clientPromise = null;
+    if (!promise) return;
     try {
-      await this.client?.close();
+      const client = await promise;
+      await client.close();
     } catch {
-      // ignore
+      // ignore — the connection failed or we're discarding it anyway
     }
-    this.client = null;
   }
 
   async onModuleDestroy(): Promise<void> {

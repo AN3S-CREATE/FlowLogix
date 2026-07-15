@@ -68,7 +68,7 @@ export class SeedService {
         });
         if (existing.length > 0) await manager.remove(existing);
 
-        const admin = users[0];
+        const admin = users[0]?.user;
         let boards = 0;
         let lists = 0;
         let cards = 0;
@@ -85,12 +85,13 @@ export class SeedService {
           boards++;
 
           // Associate every seed user with the board at their configured role.
-          for (let i = 0; i < users.length; i++) {
+          // Role travels with the user (no parallel-array indexing).
+          for (const { user, role } of users) {
             await manager.save(
               manager.create(BoardMember, {
                 boardId: board.id,
-                userId: users[i].id,
-                role: ROLE_BY_NAME[SEED_USERS[i].role],
+                userId: user.id,
+                role,
               }),
             );
           }
@@ -148,10 +149,16 @@ export class SeedService {
     );
   }
 
-  /** Upsert each seed user by email, hashing the test password with bcrypt. */
-  private async upsertUsers(orgId: string): Promise<User[]> {
+  /**
+   * Upsert each seed user by email (hashing the test password with bcrypt) and
+   * pair it with its resolved board-membership role, so callers never have to
+   * index back into SEED_USERS by position.
+   */
+  private async upsertUsers(
+    orgId: string,
+  ): Promise<Array<{ user: User; role: BoardMemberRole }>> {
     const repo = this.dataSource.getRepository(User);
-    const users: User[] = [];
+    const users: Array<{ user: User; role: BoardMemberRole }> = [];
     for (const seed of SEED_USERS) {
       const passwordHash = await bcrypt.hash(seed.password, BCRYPT_ROUNDS);
       const existing = await repo.findOne({ where: { email: seed.email } });
@@ -160,7 +167,10 @@ export class SeedService {
       user.firstName = seed.firstName;
       user.lastName = seed.lastName;
       user.passwordHash = passwordHash;
-      users.push(await repo.save(user));
+      users.push({
+        user: await repo.save(user),
+        role: ROLE_BY_NAME[seed.role],
+      });
     }
     return users;
   }
