@@ -6,6 +6,7 @@ import { CreateBoardDto } from './dto/create-board.dto';
 import { UpdateBoardDto } from './dto/update-board.dto';
 import { runInTenantContext } from '../common/tenant/tenant-transaction.util';
 import { TenantAccessService } from '../common/tenant/tenant-access.service';
+import { filterVisible, isSyncDeleted } from '../common/sync-visibility';
 
 // Every method here runs through runInTenantContext rather than a plain
 // injected repository: the boards table has RLS enabled and the app
@@ -27,16 +28,18 @@ export class BoardsService {
     );
   }
 
-  findAll(orgId: string): Promise<Board[]> {
-    return runInTenantContext(this.dataSource, orgId, (manager) =>
+  async findAll(orgId: string): Promise<Board[]> {
+    const boards = await runInTenantContext(this.dataSource, orgId, (manager) =>
       manager.find(Board, { where: { orgId } }),
     );
+    // Hide records a mobile client has soft-deleted via CRDT sync.
+    return filterVisible(boards);
   }
 
   findOne(id: string, orgId: string): Promise<Board> {
     return runInTenantContext(this.dataSource, orgId, async (manager) => {
       const board = await manager.findOne(Board, { where: { id, orgId } });
-      if (!board) {
+      if (!board || isSyncDeleted(board)) {
         throw new NotFoundException('Board not found');
       }
       return board;

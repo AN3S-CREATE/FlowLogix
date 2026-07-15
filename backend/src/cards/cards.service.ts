@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Card } from './card.entity';
@@ -6,6 +6,7 @@ import { CreateCardDto } from './dto/create-card.dto';
 import { UpdateCardDto } from './dto/update-card.dto';
 import { TenantAccessService } from '../common/tenant/tenant-access.service';
 import { BoardEventsService } from '../realtime/board-events.service';
+import { filterVisible, isSyncDeleted } from '../common/sync-visibility';
 
 @Injectable()
 export class CardsService {
@@ -38,11 +39,16 @@ export class CardsService {
 
   async findAll(listId: string, orgId: string): Promise<Card[]> {
     await this.tenantAccess.assertListInOrg(listId, orgId);
-    return this.cardsRepo.find({ where: { listId } });
+    // Hide records a mobile client has soft-deleted via CRDT sync.
+    return filterVisible(await this.cardsRepo.find({ where: { listId } }));
   }
 
-  findOne(id: string, orgId: string): Promise<Card> {
-    return this.tenantAccess.assertCardInOrg(id, orgId);
+  async findOne(id: string, orgId: string): Promise<Card> {
+    const card = await this.tenantAccess.assertCardInOrg(id, orgId);
+    if (isSyncDeleted(card)) {
+      throw new NotFoundException('Card not found');
+    }
+    return card;
   }
 
   async update(id: string, orgId: string, dto: UpdateCardDto): Promise<Card> {
