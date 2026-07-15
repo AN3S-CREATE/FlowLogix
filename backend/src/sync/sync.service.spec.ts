@@ -138,6 +138,66 @@ describe('SyncService', () => {
     expect(res.changes[0].fields.title).toBe('server');
   });
 
+  it('re-reads the row under a pessimistic_write lock (by id, join-free) before merging', async () => {
+    const manager: FakeManager = {
+      findOne: jest.fn().mockResolvedValue(cardRow()),
+      update: jest.fn().mockResolvedValue({ affected: 1 }),
+    };
+    const { service } = makeService(manager);
+
+    await service.sync(
+      'org-1',
+      req({
+        id: 'c1',
+        fields: {
+          title: 'client',
+          description: 'server desc',
+          isComplete: false,
+        },
+        clocks: { title: 300, description: 100, isComplete: 100 },
+        nodeId: 'client-node',
+        deletedAt: null,
+      }),
+    );
+
+    // Two loads: (1) the relation-joined authorization load, then (2) the
+    // FOR UPDATE re-read — by id alone, no join — so a lost update can't slip in.
+    expect(manager.findOne).toHaveBeenCalledTimes(2);
+    const lockCall = manager.findOne.mock.calls[1];
+    expect(lockCall[0]).toBe(Card);
+    expect(lockCall[1]).toEqual({
+      where: { id: 'c1' },
+      lock: { mode: 'pessimistic_write' },
+    });
+  });
+
+  it('skips a row deleted between the auth load and the lock re-read', async () => {
+    // Authorized load succeeds, but the FOR UPDATE re-read finds it gone.
+    const manager: FakeManager = {
+      findOne: jest
+        .fn()
+        .mockResolvedValueOnce(cardRow())
+        .mockResolvedValueOnce(null),
+      update: jest.fn(),
+    };
+    const { service, update } = makeService(manager);
+
+    const res = await service.sync(
+      'org-1',
+      req({
+        id: 'c1',
+        fields: { title: 'client' },
+        clocks: { title: 300 },
+        nodeId: 'client-node',
+        deletedAt: null,
+      }),
+    );
+
+    expect(update).not.toHaveBeenCalled();
+    expect(res.acceptedIds).toEqual([]);
+    expect(res.changes).toHaveLength(0);
+  });
+
   it('skips an unseen / out-of-org id (not accepted, no write)', async () => {
     const manager: FakeManager = {
       findOne: jest.fn().mockResolvedValue(null),

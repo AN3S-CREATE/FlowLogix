@@ -98,10 +98,34 @@ export class SyncService {
       const changes: SyncChangeDto[] = [];
       const acceptedIds: string[] = [];
 
-      for (const change of req.changes) {
-        const row = await strategy.load(manager, change.id, orgId);
+      // Acquire row locks in a deterministic (id-sorted) order so two concurrent
+      // /sync requests touching the same records can't deadlock by locking them
+      // in opposite orders. Per-record merges are independent, so processing
+      // order doesn't affect the result. Use raw binary comparison, not
+      // localeCompare — the latter is locale-sensitive, so instances under
+      // different locales could order the same ids differently and reintroduce
+      // the deadlock this ordering exists to prevent.
+      const orderedChanges = [...req.changes].sort((a, b): number =>
+        a.id < b.id ? -1 : a.id > b.id ? 1 : 0,
+      );
+
+      for (const change of orderedChanges) {
+        // 1) Authorize: resolve the record in-org via the board-ownership chain.
         // Unseen id or a record in another org: don't accept — the client keeps
         // it pending and (for genuinely new records) creates it via the CRUD API.
+        const authorized = await strategy.load(manager, change.id, orgId);
+        if (!authorized) continue;
+
+        // 2) Lock the row FOR UPDATE and re-read its freshly-committed state, so
+        // concurrent syncs (or a CRUD write) on the same record serialize instead
+        // of racing read-modify-write and losing an update. The lock is by id
+        // alone — no relation join — so Postgres doesn't reject it on the nullable
+        // side of an outer join. Null here means it was deleted between the two
+        // reads; skip it.
+        const row = (await manager.findOne(strategy.entity, {
+          where: { id: change.id },
+          lock: { mode: 'pessimistic_write' },
+        })) as SyncRow | null;
         if (!row) continue;
 
         const server: RecordState = {
