@@ -45,15 +45,23 @@ export class RedisProbe implements HealthProbe, OnModuleDestroy {
   private getClient(): Promise<RedisClientType> {
     if (!this.clientPromise) {
       this.clientPromise = (async () => {
-        const client: RedisClientType = createClient({
-          // Authenticate when the production Redis enforces `requirepass`.
-          password: process.env.REDIS_PASSWORD || undefined,
-          socket: {
-            host: process.env.REDIS_HOST ?? 'localhost',
-            port: Number(process.env.REDIS_PORT ?? 6379),
-            reconnectStrategy: false,
-          },
-        });
+        // Prefer REDIS_URL when set (managed-cloud standard, mirrors the
+        // pub/sub service); otherwise host/port + optional requirepass password.
+        const client: RedisClientType = createClient(
+          process.env.REDIS_URL
+            ? {
+                url: process.env.REDIS_URL,
+                socket: { reconnectStrategy: false },
+              }
+            : {
+                password: process.env.REDIS_PASSWORD || undefined,
+                socket: {
+                  host: process.env.REDIS_HOST ?? 'localhost',
+                  port: Number(process.env.REDIS_PORT ?? 6379),
+                  reconnectStrategy: false,
+                },
+              },
+        );
         // Swallow async errors; `check()` reports connectivity via its result.
         client.on('error', () => undefined);
         await client.connect();

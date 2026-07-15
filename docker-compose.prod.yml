@@ -61,6 +61,7 @@ services:
     depends_on:
       postgres: { condition: service_healthy }
       redis-master: { condition: service_healthy }
+      mongodb: { condition: service_healthy }
     networks: [backend]
 
   api2:
@@ -89,10 +90,14 @@ services:
         '--requirepass', '${REDIS_PASSWORD}',
         '--masterauth', '${REDIS_PASSWORD}',
       ]
+    # redis-cli reads REDISCLI_AUTH, so the healthcheck authenticates without
+    # putting the password on the command line (where docker inspect/ps expose it).
+    environment:
+      REDISCLI_AUTH: ${REDIS_PASSWORD}
     volumes:
       - redis_master_data:/data
     healthcheck:
-      test: ['CMD', 'redis-cli', '-a', '${REDIS_PASSWORD}', 'ping']
+      test: ['CMD', 'redis-cli', 'ping']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -110,12 +115,14 @@ services:
         '--masterauth', '${REDIS_PASSWORD}',
         '--requirepass', '${REDIS_PASSWORD}',
       ]
+    environment:
+      REDISCLI_AUTH: ${REDIS_PASSWORD}
     depends_on:
       redis-master: { condition: service_healthy }
     volumes:
       - redis_replica_data:/data
     healthcheck:
-      test: ['CMD', 'redis-cli', '-a', '${REDIS_PASSWORD}', 'ping']
+      test: ['CMD', 'redis-cli', 'ping']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -148,8 +155,17 @@ services:
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
     volumes:
       - mongo_data:/data/db
+    # Auth is enabled, so the healthcheck must authenticate against admin.
     healthcheck:
-      test: ['CMD', 'mongosh', '--eval', 'db.adminCommand("ping")']
+      test:
+        [
+          'CMD',
+          'mongosh',
+          '-u', '${MONGO_USER}',
+          '-p', '${MONGO_PASSWORD}',
+          '--authenticationDatabase', 'admin',
+          '--eval', 'db.adminCommand("ping")',
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
