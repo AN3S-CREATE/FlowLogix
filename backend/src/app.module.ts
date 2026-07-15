@@ -12,6 +12,7 @@ import { CardsModule } from './cards/cards.module';
 import { CardMembersModule } from './card-members/card-members.module';
 import { CommentsModule } from './comments/comments.module';
 import { RealtimeModule } from './realtime/realtime.module';
+import { SyncModule } from './sync/sync.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { RealtimeModule } from './realtime/realtime.module';
     CardMembersModule,
     CommentsModule,
     RealtimeModule,
+    SyncModule,
   ],
   controllers: [AppController],
   providers: [AppService],
