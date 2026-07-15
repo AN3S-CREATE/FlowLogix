@@ -101,9 +101,12 @@ export class SyncService {
       // Acquire row locks in a deterministic (id-sorted) order so two concurrent
       // /sync requests touching the same records can't deadlock by locking them
       // in opposite orders. Per-record merges are independent, so processing
-      // order doesn't affect the result.
-      const orderedChanges = [...req.changes].sort((a, b) =>
-        a.id.localeCompare(b.id),
+      // order doesn't affect the result. Use raw binary comparison, not
+      // localeCompare — the latter is locale-sensitive, so instances under
+      // different locales could order the same ids differently and reintroduce
+      // the deadlock this ordering exists to prevent.
+      const orderedChanges = [...req.changes].sort((a, b): number =>
+        a.id < b.id ? -1 : a.id > b.id ? 1 : 0,
       );
 
       for (const change of orderedChanges) {

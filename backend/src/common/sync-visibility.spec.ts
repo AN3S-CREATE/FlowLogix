@@ -27,6 +27,14 @@ describe('isSyncDeleted', () => {
   it('treats an empty clock map as never-written (tombstone wins)', () => {
     expect(isSyncDeleted(row(1, {}))).toBe(true);
   });
+
+  it('ignores a non-numeric clock instead of leaking the tombstoned row', () => {
+    // A malformed JSONB clock must not poison Math.max into NaN (which would
+    // make every `>=` false and expose a genuinely-deleted row).
+    const bad = { title: 'oops' as unknown as number, description: 100 };
+    expect(isSyncDeleted(row(300, bad))).toBe(true); // 300 >= 100, still deleted
+    expect(isSyncDeleted(row(50, bad))).toBe(false); // 50 < 100, resurrected
+  });
 });
 
 describe('filterVisible', () => {

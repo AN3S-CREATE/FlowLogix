@@ -63,6 +63,8 @@ export class ListsService {
     const list = await this.tenantAccess.assertListInOrg(id, orgId);
     const boardId = list.boardId;
     await this.listsRepo.remove(list);
-    await this.boardEvents.emit('list.deleted', boardId, { listId: id });
+    // Fire-and-forget, matching create/update and cards: emit is best-effort
+    // (errors swallowed internally), so don't add Redis latency to the delete.
+    void this.boardEvents.emit('list.deleted', boardId, { listId: id });
   }
 }

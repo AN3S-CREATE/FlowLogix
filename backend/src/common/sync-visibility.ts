@@ -22,7 +22,12 @@ export function isSyncDeleted(row: SyncDeletable): boolean {
   if (row.syncDeletedAt === null || row.syncDeletedAt === undefined) {
     return false;
   }
-  const clockValues = Object.values(row.syncClocks ?? {}).map(Number);
+  // `sync_clocks` is JSONB, so a malformed value could be non-numeric. Keep only
+  // finite numbers: a stray NaN in the spread would make `Math.max` return NaN,
+  // every `>=` comparison false, and a genuinely-deleted row leak into reads.
+  const clockValues = Object.values(row.syncClocks ?? {})
+    .map(Number)
+    .filter((n) => Number.isFinite(n));
   const newestFieldWrite = Math.max(0, ...clockValues);
   return row.syncDeletedAt >= newestFieldWrite;
 }
