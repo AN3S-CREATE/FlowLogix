@@ -13,6 +13,10 @@ frontend/vite.config.d.ts
 .env
 .env.local
 .env.*.local
+.env.prod
+
+# Production TLS material (mounted into the nginx edge, never committed)
+deploy/certs/
 
 # Logs
 *.log

@@ -39,6 +39,23 @@ describe('MetricsService', () => {
     );
   });
 
+  it('records HTTP request latency into the duration histogram', async () => {
+    const metrics = new MetricsService();
+    metrics.observeHttpRequest('GET', '/cards/:id', 200, 0.042);
+
+    const text = await metrics.metrics();
+    expect(text).toMatch(/flowlogix_http_request_duration_seconds_count\{/);
+    expect(text).toMatch(
+      /flowlogix_http_request_duration_seconds_bucket\{[^}]*method="GET"[^}]*route="\/cards\/:id"[^}]*status="200"/,
+    );
+  });
+
+  it('exposes default node process (cpu/memory) metrics', async () => {
+    const text = await new MetricsService().metrics();
+    expect(text).toMatch(/flowlogix_process_cpu_seconds_total/);
+    expect(text).toMatch(/flowlogix_process_resident_memory_bytes/);
+  });
+
   it('advertises the prometheus content type', () => {
     expect(new MetricsService().contentType()).toContain('text/plain');
   });

@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { Gauge, Registry } from 'prom-client';
+import { collectDefaultMetrics, Gauge, Histogram, Registry } from 'prom-client';
 import { ProbeResult } from './health.types';
 
 /**
@@ -48,9 +48,34 @@ export class MetricsService {
     help: 'Number of open realtime websocket connections',
     registers: [this.registry],
   });
+  private readonly httpDuration = new Histogram({
+    name: 'flowlogix_http_request_duration_seconds',
+    help: 'HTTP request latency in seconds, by method/route/status',
+    labelNames: ['method', 'route', 'status'],
+    // Buckets tuned for a web API: sub-10ms up to slow 5s outliers.
+    buckets: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5],
+    registers: [this.registry],
+  });
 
   constructor() {
     this.registry.setDefaultLabels({ app: 'flowlogix-backend' });
+    // Node process CPU + memory + event-loop metrics (process_cpu_seconds_total,
+    // process_resident_memory_bytes, nodejs_heap_size_used_bytes, ...) so the
+    // Grafana dashboard can show per-instance memory/CPU without a node_exporter.
+    collectDefaultMetrics({ register: this.registry, prefix: 'flowlogix_' });
+  }
+
+  /** Observe one completed HTTP request's latency (seconds). */
+  observeHttpRequest(
+    method: string,
+    route: string,
+    status: number,
+    durationSeconds: number,
+  ): void {
+    this.httpDuration.observe(
+      { method, route, status: String(status) },
+      durationSeconds,
+    );
   }
 
   /** Fold a probe result into the dependency + latency/memory gauges. */

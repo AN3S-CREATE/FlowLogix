@@ -2,9 +2,20 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AppModule } from './app.module';
+import { winstonLogger } from './common/logging/winston.config';
+import { HttpMetricsInterceptor } from './common/metrics/http-metrics.interceptor';
+import { MetricsService } from './health/metrics.service';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  // Structured JSON logs to stdout (see winston.config.ts); passed at creation
+  // so bootstrap-time logs flow through the same pipeline.
+  const app = await NestFactory.create(AppModule, { logger: winstonLogger });
+
+  // Record per-request latency into the Prometheus histogram scraped at
+  // /health/metrics (drives the API-latency panels in the Grafana dashboard).
+  app.useGlobalInterceptors(
+    new HttpMetricsInterceptor(app.get(MetricsService)),
+  );
 
   const configService = app.get(ConfigService);
   const corsOrigin = configService.get<string>(
