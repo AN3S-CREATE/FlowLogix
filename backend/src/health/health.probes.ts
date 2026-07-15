@@ -46,6 +46,8 @@ export class RedisProbe implements HealthProbe, OnModuleDestroy {
     if (!this.clientPromise) {
       this.clientPromise = (async () => {
         const client: RedisClientType = createClient({
+          // Authenticate when the production Redis enforces `requirepass`.
+          password: process.env.REDIS_PASSWORD || undefined,
           socket: {
             host: process.env.REDIS_HOST ?? 'localhost',
             port: Number(process.env.REDIS_PORT ?? 6379),
