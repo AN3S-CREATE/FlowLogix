@@ -14,7 +14,9 @@
  */
 export interface SyncDeletable {
   syncDeletedAt: number | null;
-  syncClocks: Record<string, number>;
+  // Nullable/optional: the `sync_clocks` JSONB column can be null for rows that
+  // predate the sync metadata, which is why the reads below guard with `?? {}`.
+  syncClocks?: Record<string, number> | null;
 }
 
 /** True if the record's tombstone dominates its newest field write. */
