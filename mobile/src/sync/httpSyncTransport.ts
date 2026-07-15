@@ -69,12 +69,14 @@ export class HttpSyncTransport<F extends Record<string, unknown>>
 {
   private readonly fetchImpl: FetchLike;
   private readonly timeoutMs: number;
+  private readonly baseUrl: string;
 
   constructor(private readonly cfg: HttpSyncConfig) {
-    const globalFetch = (
-      globalThis as { fetch?: FetchLike }
-    ).fetch;
-    const impl = cfg.fetchImpl ?? globalFetch;
+    const globalFetch = (globalThis as { fetch?: FetchLike }).fetch;
+    // Bind to globalThis: a bare aliased `fetch` loses its receiver in some
+    // runtimes/polyfills and throws "Illegal invocation" when invoked.
+    const impl =
+      cfg.fetchImpl ?? (globalFetch ? globalFetch.bind(globalThis) : undefined);
     if (!impl) {
       throw new Error(
         'HttpSyncTransport: no fetch available — pass cfg.fetchImpl',
@@ -82,6 +84,8 @@ export class HttpSyncTransport<F extends Record<string, unknown>>
     }
     this.fetchImpl = impl;
     this.timeoutMs = cfg.timeoutMs ?? 15_000;
+    // Strip trailing slashes so `${baseUrl}/sync` never doubles up (`//sync`).
+    this.baseUrl = cfg.baseUrl.replace(/\/+$/, '');
   }
 
   async pull(
@@ -118,7 +122,7 @@ export class HttpSyncTransport<F extends Record<string, unknown>>
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
     let res: FetchResponse;
     try {
-      res = await this.fetchImpl(`${this.cfg.baseUrl}/sync`, {
+      res = await this.fetchImpl(`${this.baseUrl}/sync`, {
         method: 'POST',
         headers,
         body: JSON.stringify(body),
@@ -151,13 +155,30 @@ export class HttpSyncTransport<F extends Record<string, unknown>>
     if (typeof obj.checkpoint !== 'number') {
       throw new Error('sync response missing numeric "checkpoint"');
     }
+    // Deep-validate each change: a malformed item (missing id/fields/clocks)
+    // would otherwise pass and only blow up later inside the merge engine.
+    const changes = obj.changes.map((c) => this.parseChange(c));
     const acceptedIds = Array.isArray(obj.acceptedIds)
       ? obj.acceptedIds.filter((id): id is string => typeof id === 'string')
       : [];
-    return {
-      changes: obj.changes as RemoteChange<F>[],
-      checkpoint: obj.checkpoint,
-      acceptedIds,
-    };
+    return { changes, checkpoint: obj.checkpoint, acceptedIds };
+  }
+
+  /** Validate one wire change conforms to the `RemoteChange<F>` shape. */
+  private parseChange(raw: unknown): RemoteChange<F> {
+    if (typeof raw !== 'object' || raw === null) {
+      throw new Error('sync response contains a non-object change');
+    }
+    const c = raw as Record<string, unknown>;
+    if (
+      typeof c.id !== 'string' ||
+      typeof c.fields !== 'object' ||
+      c.fields === null ||
+      typeof c.clocks !== 'object' ||
+      c.clocks === null
+    ) {
+      throw new Error(`sync response contains a malformed change (id=${String(c.id)})`);
+    }
+    return c as unknown as RemoteChange<F>;
   }
 }

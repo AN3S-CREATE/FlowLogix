@@ -128,4 +128,35 @@ describe('HttpSyncTransport', () => {
 
     await expect(t.pull('cards', 0)).rejects.toThrow(/changes/);
   });
+
+  it('rejects a change item missing required CRDT fields', async () => {
+    const { fetchImpl } = fakeFetch(() => ({
+      body: {
+        // `id` present but `clocks` missing -> malformed change.
+        changes: [{ id: 'c1', fields: { title: 'x' } }],
+        checkpoint: 5,
+        acceptedIds: [],
+      },
+    }));
+    const t = new HttpSyncTransport<CardFields>({
+      baseUrl: 'https://edge.test',
+      fetchImpl,
+    });
+
+    await expect(t.pull('cards', 0)).rejects.toThrow(/malformed change/);
+  });
+
+  it('normalizes a baseUrl with trailing slashes (no double slash)', async () => {
+    const { fetchImpl, calls } = fakeFetch(() => ({
+      body: { changes: [], checkpoint: 1, acceptedIds: [] },
+    }));
+    const t = new HttpSyncTransport<CardFields>({
+      baseUrl: 'https://edge.test/',
+      fetchImpl,
+    });
+
+    await t.pull('cards', 0);
+
+    expect(calls[0].url).toBe('https://edge.test/sync');
+  });
 });
