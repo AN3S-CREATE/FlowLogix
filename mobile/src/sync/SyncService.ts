@@ -254,6 +254,7 @@ export class SyncEngine<F extends Record<string, unknown>> {
 export class SyncService {
   private readonly engines: Record<CollectionName, SyncEngine<never>>;
   private unsubscribe: (() => void) | null = null;
+  private syncing = false;
   /** Re-entrancy guard: only one full sync runs at a time. */
   private syncing = false;
 
