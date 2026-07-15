@@ -4,6 +4,7 @@ import {
   BoardMessageHandler,
 } from './redis-pubsub.service';
 import { TenantAccessService } from '../common/tenant/tenant-access.service';
+import { MetricsService } from '../health/metrics.service';
 import { boardRoom, WS_EVENTS } from './realtime.constants';
 import { BoardMutationEnvelope } from './dto/board-mutation';
 
@@ -43,9 +44,14 @@ describe('RealtimeGateway', () => {
       assertBoardInOrg: jest.fn().mockResolvedValue({ id: 'board-1' }),
     };
 
+    const metrics = {
+      setWebsocketPoolSize: jest.fn(),
+      setActiveBoardUsers: jest.fn(),
+    } as unknown as MetricsService;
     gateway = new RealtimeGateway(
       redis as unknown as RedisPubSubService,
       tenant as unknown as TenantAccessService,
+      metrics,
     );
     (gateway as unknown as { server: unknown }).server = {
       to: jest.fn().mockReturnValue({ emit: roomEmit }),

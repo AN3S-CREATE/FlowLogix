@@ -13,6 +13,7 @@ import {
 import { Server, Socket } from 'socket.io';
 import { RedisPubSubService } from './redis-pubsub.service';
 import { TenantAccessService } from '../common/tenant/tenant-access.service';
+import { MetricsService } from '../health/metrics.service';
 import { WsExceptionFilter } from './ws-exception.filter';
 import {
   boardIdFromRoomChannel,
@@ -53,9 +54,15 @@ export class RealtimeGateway
   @WebSocketServer()
   private server!: Server;
 
+  /** Open websocket connections (drives the pool-size gauge). */
+  private connectedSockets = 0;
+  /** socketId -> board rooms it has joined, for the active-board-users gauge. */
+  private readonly boardsBySocket = new Map<string, Set<string>>();
+
   constructor(
     private readonly redis: RedisPubSubService,
     private readonly tenantAccess: TenantAccessService,
+    private readonly metrics: MetricsService,
   ) {}
 
   afterInit(): void {
@@ -69,11 +76,36 @@ export class RealtimeGateway
   }
 
   handleConnection(client: Socket): void {
+    this.connectedSockets++;
+    this.metrics.setWebsocketPoolSize(this.connectedSockets);
     this.logger.debug(`Client connected: ${client.id}`);
   }
 
   handleDisconnect(client: Socket): void {
+    this.connectedSockets = Math.max(0, this.connectedSockets - 1);
+    this.boardsBySocket.delete(client.id);
+    this.metrics.setWebsocketPoolSize(this.connectedSockets);
+    this.metrics.setActiveBoardUsers(this.boardsBySocket.size);
     this.logger.debug(`Client disconnected: ${client.id}`);
+  }
+
+  /** Track a socket's board-room membership for the active-board-users gauge. */
+  private trackBoardJoin(socketId: string, boardId: string): void {
+    let boards = this.boardsBySocket.get(socketId);
+    if (!boards) {
+      boards = new Set<string>();
+      this.boardsBySocket.set(socketId, boards);
+    }
+    boards.add(boardId);
+    this.metrics.setActiveBoardUsers(this.boardsBySocket.size);
+  }
+
+  private trackBoardLeave(socketId: string, boardId: string): void {
+    const boards = this.boardsBySocket.get(socketId);
+    if (!boards) return;
+    boards.delete(boardId);
+    if (boards.size === 0) this.boardsBySocket.delete(socketId);
+    this.metrics.setActiveBoardUsers(this.boardsBySocket.size);
   }
 
   @UsePipes(new ValidationPipe({ whitelist: true, transform: true }))
@@ -88,6 +120,7 @@ export class RealtimeGateway
     await this.tenantAccess.assertBoardInOrg(boardId, orgId);
 
     await client.join(boardRoom(boardId));
+    this.trackBoardJoin(client.id, boardId);
     const headSeq = await this.redis.currentSequence(boardId);
     client.emit(WS_EVENTS.JOINED, { boardId, headSeq });
     this.logger.debug(`Socket ${client.id} joined board ${boardId}`);
@@ -100,6 +133,7 @@ export class RealtimeGateway
   ): Promise<void> {
     const boardId = this.requireBoardId(body?.boardId);
     await client.leave(boardRoom(boardId));
+    this.trackBoardLeave(client.id, boardId);
   }
 
   /**
