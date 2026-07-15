@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
   IsArray,
   IsIn,
   IsInt,
@@ -9,6 +10,9 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
+
+/** Cap the change log per request so one call can't exhaust memory/DB time. */
+export const MAX_SYNC_CHANGES = 1000;
 
 /** Collections the mobile client syncs (must match the mobile `CollectionName`). */
 export const SYNC_COLLECTIONS = ['boards', 'lists', 'cards'] as const;
@@ -47,6 +51,7 @@ export class SyncRequestDto {
   sinceCheckpoint: number;
 
   @IsArray()
+  @ArrayMaxSize(MAX_SYNC_CHANGES)
   @ValidateNested({ each: true })
   @Type(() => SyncChangeDto)
   changes: SyncChangeDto[];
