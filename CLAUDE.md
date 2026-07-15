@@ -47,11 +47,20 @@ yet. Notable gaps between the rules and the current code:
   `mergeRecord` keyed on `<field>_updated_at`. `sync/` is the offline-first
   `SyncService`: mutations write straight to local SQLite and stamp per-field
   clocks; on reconnect it pulls, merges field-by-field, and pushes pending
-  changes. `attachments/` is a background upload queue that stages large files
-  locally and uploads only on Wi-Fi/LTE, with bounded concurrency and backoff.
-  `model/` has the WatermelonDB schema/models (per-field `*_updated_at` columns)
-  and the port adapters. Pure logic is unit-tested with vitest (32 tests); the
-  React Native UI and native SQLite/NetInfo wiring live behind injectable ports.
+  changes. `HttpSyncTransport` (`sync/httpSyncTransport.ts`) is the concrete
+  transport: it POSTs the field-level change log to the backend `/sync` endpoint
+  and applies the server-newer fields it returns (fetch is injected, so it is
+  testable off-device). `attachments/` is a background upload queue that stages
+  large files locally and uploads only on Wi-Fi/LTE, with bounded concurrency and
+  backoff; `attachments/backgroundUploadTask.ts` is the Expo/React Native
+  background-task glue that drains it on OS wake-ups when the connection is
+  suitable (the `expo-task-manager` / `expo-background-task` surface is an
+  injected `BackgroundTaskHost` port). `model/` has the WatermelonDB
+  schema/models (per-field `*_updated_at` columns) and the port adapters. Pure
+  logic is unit-tested with vitest (44 tests); the React Native UI and native
+  SQLite/NetInfo/Expo wiring live behind injectable ports. **Not yet built:** the
+  server side of `/sync` — a NestJS endpoint doing field-level LWW against the
+  PostgreSQL master (needs per-field CRDT clocks added to `boards`/`lists`/`cards`).
 
 When you implement any of the above, follow `.cursorrules` and update this
 status list.
