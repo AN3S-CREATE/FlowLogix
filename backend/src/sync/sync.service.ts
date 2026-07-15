@@ -98,7 +98,15 @@ export class SyncService {
       const changes: SyncChangeDto[] = [];
       const acceptedIds: string[] = [];
 
-      for (const change of req.changes) {
+      // Acquire row locks in a deterministic (id-sorted) order so two concurrent
+      // /sync requests touching the same records can't deadlock by locking them
+      // in opposite orders. Per-record merges are independent, so processing
+      // order doesn't affect the result.
+      const orderedChanges = [...req.changes].sort((a, b) =>
+        a.id.localeCompare(b.id),
+      );
+
+      for (const change of orderedChanges) {
         // 1) Authorize: resolve the record in-org via the board-ownership chain.
         // Unseen id or a record in another org: don't accept — the client keeps
         // it pending and (for genuinely new records) creates it via the CRUD API.
