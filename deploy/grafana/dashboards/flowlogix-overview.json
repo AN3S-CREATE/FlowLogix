@@ -1,0 +1,140 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "graphTooltip": 1,
+  "schemaVersion": 39,
+  "tags": ["flowlogix", "apm"],
+  "time": { "from": "now-1h", "to": "now" },
+  "refresh": "15s",
+  "title": "FlowLogix — API & Realtime Overview",
+  "uid": "flowlogix-overview",
+  "templating": {
+    "list": [
+      {
+        "name": "instance",
+        "label": "API instance",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "query": "label_values(flowlogix_http_request_duration_seconds_count, instance)",
+        "includeAll": true,
+        "multi": true,
+        "current": { "text": "All", "value": "$__all" }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "API response latency (p50 / p95 / p99)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.50, sum(rate(flowlogix_http_request_duration_seconds_bucket{instance=~\"$instance\"}[5m])) by (le))",
+          "legendFormat": "p50"
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.95, sum(rate(flowlogix_http_request_duration_seconds_bucket{instance=~\"$instance\"}[5m])) by (le))",
+          "legendFormat": "p95"
+        },
+        {
+          "refId": "C",
+          "expr": "histogram_quantile(0.99, sum(rate(flowlogix_http_request_duration_seconds_bucket{instance=~\"$instance\"}[5m])) by (le))",
+          "legendFormat": "p99"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Request rate by status",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(flowlogix_http_request_duration_seconds_count{instance=~\"$instance\"}[5m])) by (status)",
+          "legendFormat": "{{status}}"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Active Socket.io sessions",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(flowlogix_websocket_pool_size{instance=~\"$instance\"})",
+          "legendFormat": "open sockets"
+        },
+        {
+          "refId": "B",
+          "expr": "sum(flowlogix_active_board_users{instance=~\"$instance\"})",
+          "legendFormat": "active board users"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Dependency health (postgres / redis / mongo)",
+      "type": "state-timeline",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "down", "color": "red" }, "1": { "text": "up", "color": "green" } } }
+          ]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max(flowlogix_dependency_up{instance=~\"$instance\"}) by (dependency)",
+          "legendFormat": "{{dependency}}"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Resident memory per instance",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "fieldConfig": { "defaults": { "unit": "bytes" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "flowlogix_process_resident_memory_bytes{instance=~\"$instance\"}",
+          "legendFormat": "{{instance}}"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "CPU usage per instance (cores)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(flowlogix_process_cpu_seconds_total{instance=~\"$instance\"}[5m])",
+          "legendFormat": "{{instance}}"
+        }
+      ]
+    }
+  ]
+}

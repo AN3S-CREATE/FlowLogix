@@ -1,0 +1,31 @@
+# Prometheus scrape configuration for the FlowLogix production stack.
+# Reachable inside the `backend` docker network by service name.
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: flowlogix-prod
+
+scrape_configs:
+  # NestJS API replicas. Each exposes the app's Prometheus registry at
+  # /health/metrics (dependency up/down, HTTP latency histogram, active
+  # Socket.io sessions, websocket pool size, plus node process CPU/memory).
+  - job_name: flowlogix-api
+    metrics_path: /health/metrics
+    static_configs:
+      - targets:
+          - api1:3000
+          - api2:3000
+          - api3:3000
+    relabel_configs:
+      # Expose the replica name as the `instance` label for per-instance panels.
+      - source_labels: [__address__]
+        regex: '([^:]+):.*'
+        target_label: instance
+        replacement: '$1'
+
+  # Prometheus self-monitoring.
+  - job_name: prometheus
+    static_configs:
+      - targets: ['localhost:9090']

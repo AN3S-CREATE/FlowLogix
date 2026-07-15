@@ -1,0 +1,215 @@
+# FlowLogix production stack.
+#
+#   web        Nginx edge: serves the SPA + round-robins the API, terminates TLS
+#   api1..3    three NestJS API replicas behind the load balancer
+#   redis-*    Redis master + replica, password-authenticated
+#   postgres   primary datastore (RLS-enforced)
+#   mongodb    document store
+#   prometheus scrapes /health/metrics off every API replica
+#   grafana    dashboards over Prometheus
+#
+# Secrets come from the environment (see .env.prod.example); nothing sensitive
+# is committed. Bring up with:
+#   docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
+
+services:
+  # ------------------------------------------------------------------ edge / LB
+  web:
+    image: ${REGISTRY:-ghcr.io}/${IMAGE_NAMESPACE:-veralogix-group-innovation/flowlogix}-frontend:${IMAGE_TAG:-latest}
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: logixflow-web
+    restart: unless-stopped
+    depends_on: [api1, api2, api3]
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      # Mount TLS certs from the host (e.g. Let's Encrypt live dir) read-only.
+      - ${TLS_CERT_DIR:-./deploy/certs}:/etc/nginx/certs:ro
+    networks: [edge, backend]
+
+  # -------------------------------------------------------------- API replicas
+  # Three identical NestJS instances. YAML anchors keep them DRY; only the
+  # container name and NODE_ID differ so metrics/logs stay attributable.
+  api1: &api
+    image: ${REGISTRY:-ghcr.io}/${IMAGE_NAMESPACE:-veralogix-group-innovation/flowlogix}-backend:${IMAGE_TAG:-latest}
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: logixflow-api1
+    restart: unless-stopped
+    environment: &api-env
+      NODE_ENV: production
+      PORT: '3000'
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      NODE_ID: api1
+      CORS_ORIGIN: ${CORS_ORIGIN}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: '5432'
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      APP_DB_USER: ${APP_DB_USER}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD}
+      MONGO_URI: mongodb://${MONGO_USER}:${MONGO_PASSWORD}@mongodb:27017
+      # Point Redis clients at the master for writes; replica is read-only.
+      REDIS_HOST: redis-master
+      REDIS_PORT: '6379'
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis-master: { condition: service_healthy }
+      mongodb: { condition: service_healthy }
+    networks: [backend]
+
+  api2:
+    <<: *api
+    container_name: logixflow-api2
+    environment:
+      <<: *api-env
+      NODE_ID: api2
+
+  api3:
+    <<: *api
+    container_name: logixflow-api3
+    environment:
+      <<: *api-env
+      NODE_ID: api3
+
+  # --------------------------------------------------------- Redis master/slave
+  redis-master:
+    image: redis:7-alpine
+    container_name: logixflow-redis-master
+    restart: unless-stopped
+    command:
+      [
+        'redis-server',
+        '--appendonly', 'yes',
+        '--requirepass', '${REDIS_PASSWORD}',
+        '--masterauth', '${REDIS_PASSWORD}',
+      ]
+    # redis-cli reads REDISCLI_AUTH, so the healthcheck authenticates without
+    # putting the password on the command line (where docker inspect/ps expose it).
+    environment:
+      REDISCLI_AUTH: ${REDIS_PASSWORD}
+    volumes:
+      - redis_master_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [backend]
+
+  redis-replica:
+    image: redis:7-alpine
+    container_name: logixflow-redis-replica
+    restart: unless-stopped
+    command:
+      [
+        'redis-server',
+        '--appendonly', 'yes',
+        '--replicaof', 'redis-master', '6379',
+        '--masterauth', '${REDIS_PASSWORD}',
+        '--requirepass', '${REDIS_PASSWORD}',
+      ]
+    environment:
+      REDISCLI_AUTH: ${REDIS_PASSWORD}
+    depends_on:
+      redis-master: { condition: service_healthy }
+    volumes:
+      - redis_replica_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [backend]
+
+  # ---------------------------------------------------------------- datastores
+  postgres:
+    image: postgres:16-alpine
+    container_name: logixflow-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [backend]
+
+  mongodb:
+    image: mongo:7
+    container_name: logixflow-mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
+    volumes:
+      - mongo_data:/data/db
+    # Auth is enabled, so the healthcheck must authenticate against admin.
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'mongosh',
+          '-u', '${MONGO_USER}',
+          '-p', '${MONGO_PASSWORD}',
+          '--authenticationDatabase', 'admin',
+          '--eval', 'db.adminCommand("ping")',
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [backend]
+
+  # ------------------------------------------------------------ APM / monitoring
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: logixflow-prometheus
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.retention.time=15d'
+    volumes:
+      - ./deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    networks: [backend]
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: logixflow-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+      GF_USERS_ALLOW_SIGN_UP: 'false'
+    ports:
+      - '${GRAFANA_PORT:-3001}:3000'
+    volumes:
+      - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    depends_on: [prometheus]
+    networks: [backend]
+
+networks:
+  edge:
+    driver: bridge
+  backend:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  mongo_data:
+  redis_master_data:
+  redis_replica_data:
+  prometheus_data:
+  grafana_data:

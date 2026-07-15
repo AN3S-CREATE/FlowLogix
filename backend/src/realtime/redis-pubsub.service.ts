@@ -155,6 +155,9 @@ export class RedisPubSubService implements OnModuleInit, OnModuleDestroy {
     if (explicit) return explicit;
     const host = this.config.get<string>('REDIS_HOST', 'localhost');
     const port = this.config.get<string>('REDIS_PORT', '6379');
-    return `redis://${host}:${port}`;
+    // Include the password when the production Redis enforces `requirepass`.
+    const password = this.config.get<string>('REDIS_PASSWORD');
+    const auth = password ? `:${encodeURIComponent(password)}@` : '';
+    return `redis://${auth}${host}:${port}`;
   }
 }
