@@ -99,9 +99,22 @@ export class SyncService {
       const acceptedIds: string[] = [];
 
       for (const change of req.changes) {
-        const row = await strategy.load(manager, change.id, orgId);
+        // 1) Authorize: resolve the record in-org via the board-ownership chain.
         // Unseen id or a record in another org: don't accept — the client keeps
         // it pending and (for genuinely new records) creates it via the CRUD API.
+        const authorized = await strategy.load(manager, change.id, orgId);
+        if (!authorized) continue;
+
+        // 2) Lock the row FOR UPDATE and re-read its freshly-committed state, so
+        // concurrent syncs (or a CRUD write) on the same record serialize instead
+        // of racing read-modify-write and losing an update. The lock is by id
+        // alone — no relation join — so Postgres doesn't reject it on the nullable
+        // side of an outer join. Null here means it was deleted between the two
+        // reads; skip it.
+        const row = (await manager.findOne(strategy.entity, {
+          where: { id: change.id },
+          lock: { mode: 'pessimistic_write' },
+        })) as SyncRow | null;
         if (!row) continue;
 
         const server: RecordState = {
