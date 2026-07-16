@@ -7,6 +7,7 @@ import { UpdateCardDto } from './dto/update-card.dto';
 import { TenantAccessService } from '../common/tenant/tenant-access.service';
 import { BoardEventsService } from '../realtime/board-events.service';
 import { filterVisible, isSyncDeleted } from '../common/sync-visibility';
+import { PositionService } from '../common/ordering/position.service';
 
 @Injectable()
 export class CardsService {
@@ -15,6 +16,7 @@ export class CardsService {
     private readonly cardsRepo: Repository<Card>,
     private readonly tenantAccess: TenantAccessService,
     private readonly boardEvents: BoardEventsService,
+    private readonly positions: PositionService,
   ) {}
 
   async create(
@@ -24,8 +26,9 @@ export class CardsService {
   ): Promise<Card> {
     // assertListInOrg loads the list's board, giving us the boardId to route on.
     const list = await this.tenantAccess.assertListInOrg(listId, orgId);
+    const positionIdx = await this.resolvePosition(listId, dto.positionIdx);
     const card = await this.cardsRepo.save(
-      this.cardsRepo.create({ ...dto, listId }),
+      this.cardsRepo.create({ ...dto, listId, positionIdx }),
     );
     // Broadcast after commit, fire-and-forget: the write is authoritative and
     // emit() is best-effort, so we don't block the response on Redis latency.
@@ -53,6 +56,8 @@ export class CardsService {
 
   async update(id: string, orgId: string, dto: UpdateCardDto): Promise<Card> {
     const card = await this.tenantAccess.assertCardInOrg(id, orgId);
+    if (dto.positionIdx !== undefined)
+      this.positions.assertValid(dto.positionIdx);
     const fromListId = card.listId;
     Object.assign(card, dto);
     const saved = await this.cardsRepo.save(card);
@@ -71,6 +76,25 @@ export class CardsService {
       },
     );
     return saved;
+  }
+
+  /**
+   * A validated key when the client supplied one, else a fresh key appended
+   * after the list's current last card (fractional-index, so O(1)).
+   */
+  private async resolvePosition(
+    listId: string,
+    provided?: string,
+  ): Promise<string> {
+    if (provided !== undefined) {
+      this.positions.assertValid(provided);
+      return provided;
+    }
+    const last = await this.cardsRepo.findOne({
+      where: { listId },
+      order: { positionIdx: 'DESC' },
+    });
+    return this.positions.keyForAppend(last ? last.positionIdx : null);
   }
 
   async remove(id: string, orgId: string): Promise<void> {

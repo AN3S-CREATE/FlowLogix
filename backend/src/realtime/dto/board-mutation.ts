@@ -23,8 +23,8 @@ export type BoardMutationType =
 export interface BoardMutationPayload {
   cardId?: string;
   listId?: string;
-  /** Fractional/positional index of the moved or reordered item. */
-  positionIdx?: number;
+  /** Base62 fractional-index key of the moved or reordered item. */
+  positionIdx?: string;
 }
 
 /**

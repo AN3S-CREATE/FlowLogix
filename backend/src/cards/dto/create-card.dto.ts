@@ -1,4 +1,10 @@
-import { IsDateString, IsNumber, IsObject, IsOptional, IsString, MaxLength } from 'class-validator';
+import {
+  IsDateString,
+  IsObject,
+  IsOptional,
+  IsString,
+  MaxLength,
+} from 'class-validator';
 
 export class CreateCardDto {
   @IsString()
@@ -9,8 +15,14 @@ export class CreateCardDto {
   @IsString()
   description?: string;
 
-  @IsNumber()
-  positionIdx: number;
+  /**
+   * Fractional-index key. Optional: when omitted the server appends the card to
+   * the end of the list; when supplied it's validated before use.
+   */
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  positionIdx?: string;
 
   @IsOptional()
   @IsDateString()

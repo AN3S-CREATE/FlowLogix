@@ -5,9 +5,15 @@ import { ListsService } from './lists.service';
 import { ListsController } from './lists.controller';
 import { TenantModule } from '../common/tenant/tenant.module';
 import { RealtimeModule } from '../realtime/realtime.module';
+import { OrderingModule } from '../common/ordering/ordering.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([List]), TenantModule, RealtimeModule],
+  imports: [
+    TypeOrmModule.forFeature([List]),
+    TenantModule,
+    RealtimeModule,
+    OrderingModule,
+  ],
   controllers: [ListsController],
   providers: [ListsService],
   exports: [ListsService],

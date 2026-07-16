@@ -26,14 +26,14 @@ describe('BoardEventsService', () => {
     await service.emit('card.moved', 'board-9', {
       cardId: 'c1',
       listId: 'l2',
-      positionIdx: 5,
+      positionIdx: 'g',
     });
 
     const expected: BoardMutationEnvelope = {
       seq: 11,
       boardId: 'board-9',
       type: 'card.moved',
-      payload: { cardId: 'c1', listId: 'l2', positionIdx: 5 },
+      payload: { cardId: 'c1', listId: 'l2', positionIdx: 'g' },
       ts: 1_234,
     };
     expect(redis.nextSequence).toHaveBeenCalledWith('board-9');

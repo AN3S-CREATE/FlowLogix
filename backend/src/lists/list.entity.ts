@@ -29,8 +29,9 @@ export class List {
   @Column({ type: 'varchar', length: 255 })
   title: string;
 
-  @Column({ name: 'position_idx', type: 'double precision' })
-  positionIdx: number;
+  // Base62 fractional-index key (Lexorank); ordered by plain string comparison.
+  @Column({ name: 'position_idx', type: 'varchar', length: 255 })
+  positionIdx: string;
 
   @Column({ name: 'is_archived', type: 'boolean', default: false })
   isArchived: boolean = false;
