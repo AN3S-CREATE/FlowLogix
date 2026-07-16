@@ -1,16 +1,16 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { InjectDataSource } from '@nestjs/typeorm';
+import { DataSource } from 'typeorm';
 import { Comment } from './comment.entity';
 import { CreateCommentDto } from './dto/create-comment.dto';
 import { UpdateCommentDto } from './dto/update-comment.dto';
 import { TenantAccessService } from '../common/tenant/tenant-access.service';
+import { runInTenantContext } from '../common/tenant/tenant-transaction.util';
 
 @Injectable()
 export class CommentsService {
   constructor(
-    @InjectRepository(Comment)
-    private readonly commentsRepo: Repository<Comment>,
+    @InjectDataSource() private readonly dataSource: DataSource,
     private readonly tenantAccess: TenantAccessService,
   ) {}
 
@@ -21,22 +21,29 @@ export class CommentsService {
   ): Promise<Comment> {
     await this.tenantAccess.assertCardInOrg(cardId, orgId);
     await this.tenantAccess.assertUserInOrg(dto.userId, orgId);
-    return this.commentsRepo.save(this.commentsRepo.create({ ...dto, cardId }));
+    // `comments` has RLS; the insert must run with the tenant set.
+    return runInTenantContext(this.dataSource, orgId, (m) =>
+      m.save(Comment, m.create(Comment, { ...dto, cardId })),
+    );
   }
 
   async findAll(cardId: string, orgId: string): Promise<Comment[]> {
     await this.tenantAccess.assertCardInOrg(cardId, orgId);
-    return this.commentsRepo.find({ where: { cardId } });
+    return runInTenantContext(this.dataSource, orgId, (m) =>
+      m.find(Comment, { where: { cardId } }),
+    );
   }
 
   async findOne(id: string, orgId: string): Promise<Comment> {
-    const comment = await this.commentsRepo.findOne({ where: { id } });
+    // RLS already scopes this to the tenant's comments; a cross-org id simply
+    // isn't visible. The app-layer card check below is defense-in-depth and
+    // keeps a uniform "not found" whether the comment is missing or foreign.
+    const comment = await runInTenantContext(this.dataSource, orgId, (m) =>
+      m.findOne(Comment, { where: { id } }),
+    );
     if (!comment) {
       throw new NotFoundException('Comment not found');
     }
-    // Normalize to the same "not found" message whether the comment
-    // doesn't exist or just belongs to another org, so callers can't
-    // probe for cross-tenant comment ids via the error text.
     try {
       await this.tenantAccess.assertCardInOrg(comment.cardId, orgId);
     } catch {
@@ -52,11 +59,15 @@ export class CommentsService {
   ): Promise<Comment> {
     const comment = await this.findOne(id, orgId);
     Object.assign(comment, dto);
-    return this.commentsRepo.save(comment);
+    return runInTenantContext(this.dataSource, orgId, (m) =>
+      m.save(Comment, comment),
+    );
   }
 
   async remove(id: string, orgId: string): Promise<void> {
     const comment = await this.findOne(id, orgId);
-    await this.commentsRepo.remove(comment);
+    await runInTenantContext(this.dataSource, orgId, (m) =>
+      m.remove(Comment, comment),
+    );
   }
 }

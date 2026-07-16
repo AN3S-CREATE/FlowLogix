@@ -3,6 +3,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource, EntityManager } from 'typeorm';
 import { PositionService } from './position.service';
+import { TENANT_SETTING } from '../tenant/tenant-transaction.util';
 
 /**
  * Precision-bloat guard for fractional indexing (§3.3.3). Consecutive inserts
@@ -11,14 +12,13 @@ import { PositionService } from './position.service';
  * (a board's lists, or a list's cards) that has grown a key past
  * `MAX_KEY_LENGTH` and re-spreads that column onto short, evenly-spaced keys.
  *
- * Runs once daily at a low-load hour. Ordering is preserved exactly — rows are
- * re-read in their current sort order (with created_at + id as the deterministic
- * tiebreak) before new keys are assigned.
- *
- * Safe under horizontal scaling: all replicas fire this @Cron, so the whole
- * pass runs inside one transaction guarded by a Postgres **advisory xact lock**
- * — only one instance does the work, the rest no-op, and every column's
- * re-key is atomic (auto-committed/rolled back with the transaction).
+ * `lists`/`cards` are RLS-protected, so the scan/update can't see across orgs.
+ * The whole pass runs in one transaction: it takes a Postgres advisory xact
+ * lock (only one replica does the work), then iterates every org and sets the
+ * tenant (`set_config(app.current_tenant_id, …, true)`) before scanning — so
+ * each org's over-long columns are found and rewritten under its own RLS.
+ * Ordering is preserved exactly (rows re-read in sort order, created_at + id as
+ * the deterministic tiebreak) and each column is rewritten atomically.
  */
 @Injectable()
 export class PositionRebalanceService {
@@ -44,8 +44,8 @@ export class PositionRebalanceService {
   }
 
   /**
-   * Rebalance every over-long list/card column, atomically and singly — returns
-   * `skipped` when another instance already holds the advisory lock.
+   * Rebalance every over-long list/card column across all orgs, atomically and
+   * singly — returns `skipped` when another instance holds the advisory lock.
    */
   async rebalanceOverlongColumns(): Promise<{
     lists: number;
@@ -59,8 +59,22 @@ export class PositionRebalanceService {
       )) as Array<{ locked: boolean }>;
       if (!locked) return { lists: 0, cards: 0, skipped: true };
 
-      const lists = await this.rebalanceTable(manager, 'lists', 'board_id');
-      const cards = await this.rebalanceTable(manager, 'cards', 'list_id');
+      // `organizations` has no RLS, so this sees every tenant.
+      const orgs = (await manager.query(
+        'SELECT id FROM organizations',
+      )) as Array<{ id: string }>;
+
+      let lists = 0;
+      let cards = 0;
+      for (const { id: orgId } of orgs) {
+        // SET LOCAL the tenant so the RLS-protected scans below see this org.
+        await manager.query('SELECT set_config($1, $2, true)', [
+          TENANT_SETTING,
+          orgId,
+        ]);
+        lists += await this.rebalanceTable(manager, 'lists', 'board_id');
+        cards += await this.rebalanceTable(manager, 'cards', 'list_id');
+      }
       return { lists, cards, skipped: false };
     });
   }
