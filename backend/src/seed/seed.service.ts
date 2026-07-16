@@ -12,6 +12,7 @@ import {
 import { List } from '../lists/list.entity';
 import { Card } from '../cards/card.entity';
 import { runInTenantContext } from '../common/tenant/tenant-transaction.util';
+import { FractionalIndexer } from '../common/ordering/fractional-indexer';
 import {
   buildCards,
   SEED_BOARDS,
@@ -50,6 +51,7 @@ export interface SeedSummary {
 @Injectable()
 export class SeedService {
   private readonly logger = new Logger(SeedService.name);
+  private readonly indexer = new FractionalIndexer();
 
   constructor(@InjectDataSource() private readonly dataSource: DataSource) {}
 
@@ -96,27 +98,29 @@ export class SeedService {
             );
           }
 
-          let listPosition = 1;
+          // Evenly-spaced fractional-index keys for the seeded lists/cards.
+          const listKeys = this.indexer.rebalance(SEED_LIST_NAMES.length);
+          let listIdx = 0;
           for (const listName of SEED_LIST_NAMES) {
             const list = await manager.save(
               manager.create(List, {
                 boardId: board.id,
                 title: listName,
-                // position_idx is still double precision (FractionalIndexer
-                // column migration pending); ascending integers suffice for seed.
-                positionIdx: listPosition++,
+                positionIdx: listKeys[listIdx++],
               }),
             );
             lists++;
 
-            let cardPosition = 1;
-            for (const card of buildCards(listName)) {
+            const seedCards = buildCards(listName);
+            const cardKeys = this.indexer.rebalance(seedCards.length);
+            let cardIdx = 0;
+            for (const card of seedCards) {
               await manager.save(
                 manager.create(Card, {
                   listId: list.id,
                   title: card.title,
                   description: card.description,
-                  positionIdx: cardPosition++,
+                  positionIdx: cardKeys[cardIdx++],
                   isComplete: card.isComplete,
                   customFields: { checklist: card.checklist },
                 }),

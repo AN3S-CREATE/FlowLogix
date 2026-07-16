@@ -45,7 +45,7 @@ function envelope(seq: number): BoardMutationEnvelope {
     seq,
     boardId: 'board-1',
     type: 'card.moved',
-    payload: { cardId: 'c1', listId: 'l2', positionIdx: 3 },
+    payload: { cardId: 'c1', listId: 'l2', positionIdx: 'g' },
     ts: 1_000,
   };
 }

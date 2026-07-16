@@ -66,7 +66,7 @@ describe('RealtimeGateway', () => {
       seq: 4,
       boardId: 'board-1',
       type: 'card.moved',
-      payload: { cardId: 'c1', listId: 'l2', positionIdx: 1 },
+      payload: { cardId: 'c1', listId: 'l2', positionIdx: 'V' },
       ts: 1,
     };
     // Simulate a frame arriving from Redis on the board channel.

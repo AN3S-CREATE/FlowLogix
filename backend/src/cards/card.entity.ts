@@ -33,8 +33,9 @@ export class Card {
   @Column({ type: 'text', nullable: true })
   description: string | null;
 
-  @Column({ name: 'position_idx', type: 'double precision' })
-  positionIdx: number;
+  // Base62 fractional-index key (Lexorank); ordered by plain string comparison.
+  @Column({ name: 'position_idx', type: 'varchar', length: 255 })
+  positionIdx: string;
 
   @Column({ name: 'due_date', type: 'timestamptz', nullable: true })
   dueDate: Date | null;
