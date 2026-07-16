@@ -8,12 +8,16 @@ import { Response } from 'express';
 import { HealthService } from './health.service';
 import { MetricsService } from './metrics.service';
 import { HealthReport } from './health.types';
+import { Public } from '../auth/public.decorator';
 
 /**
  * Diagnostics endpoints:
  *   - `GET /health`          structured multi-database health (503 when degraded)
  *   - `GET /health/metrics`  Prometheus exposition for scraping
+ *
+ * Public: load balancers and Prometheus scrape these without a token.
  */
+@Public()
 @Controller('health')
 export class HealthController {
   constructor(
