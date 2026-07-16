@@ -44,13 +44,16 @@ export class MigratePositionIdxToFractional1785000000000 implements MigrationInt
          ORDER BY position_idx ASC, created_at ASC, id ASC`,
         [parent],
       );
+      if (rows.length === 0) continue;
       const keys = this.indexer.rebalance(rows.length);
-      for (let i = 0; i < rows.length; i++) {
-        await queryRunner.query(
-          `UPDATE "${table}" SET "position_key" = $1 WHERE id = $2`,
-          [keys[i], rows[i].id],
-        );
-      }
+      // One bulk UPDATE per parent (id/key pairs zipped via unnest) instead of
+      // O(N) single-row updates — keeps the migration fast on large tables.
+      await queryRunner.query(
+        `UPDATE "${table}" t SET "position_key" = v.key
+         FROM unnest($1::uuid[], $2::varchar[]) AS v(id, key)
+         WHERE t.id = v.id`,
+        [rows.map((r) => r.id), keys],
+      );
     }
 
     await queryRunner.query(
