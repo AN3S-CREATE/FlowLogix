@@ -61,7 +61,8 @@ export class JwtAuthGuard implements CanActivate {
   private bearerToken(request: Request): string | null {
     const header = request.header('authorization');
     if (!header) return null;
-    const [scheme, value] = header.split(' ');
+    // Tolerate arbitrary whitespace between the scheme and the token.
+    const [scheme, value] = header.trim().split(/\s+/);
     return scheme?.toLowerCase() === 'bearer' && value ? value : null;
   }
 }

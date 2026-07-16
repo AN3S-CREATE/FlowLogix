@@ -9,6 +9,15 @@ import { JwtPayload } from './auth-user';
 /** The public shape of a user — never leaks the password hash. */
 export type SafeUser = Omit<User, 'passwordHash'>;
 
+/**
+ * A real (but unused) bcrypt hash. When the email is unknown or the user is
+ * inactive we still run `bcrypt.compare` against this so the response time is
+ * the same as a wrong-password attempt — no timing side-channel for account /
+ * active-status enumeration.
+ */
+const DUMMY_HASH =
+  '$2b$10$wR3JmayZaZZ2FAWm2VINNOjgBUQ1swBC.yjy2Rm9HDqcQfGRHVome';
+
 export interface LoginResult {
   accessToken: string;
   user: SafeUser;
@@ -29,11 +38,13 @@ export class AuthService {
    */
   async login(email: string, password: string): Promise<LoginResult> {
     const user = await this.usersRepo.findOne({ where: { email } });
-    const ok =
-      user !== null &&
-      user.isActive &&
-      (await bcrypt.compare(password, user.passwordHash));
-    if (!user || !ok) {
+    // Always run bcrypt.compare (against a dummy hash when the user is missing/
+    // inactive) so the timing is identical to a wrong-password attempt.
+    const passwordMatches = await bcrypt.compare(
+      password,
+      user?.passwordHash ?? DUMMY_HASH,
+    );
+    if (!user || !user.isActive || !passwordMatches) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -48,9 +59,11 @@ export class AuthService {
 
   /** Load the current principal's profile (org-scoped), minus the hash. */
   async profile(userId: string, orgId: string): Promise<SafeUser> {
-    const user = await this.usersRepo.findOne({ where: { id: userId, orgId } });
+    const user = await this.usersRepo.findOne({
+      where: { id: userId, orgId, isActive: true },
+    });
     if (!user) {
-      throw new UnauthorizedException('User no longer exists');
+      throw new UnauthorizedException('User no longer exists or is inactive');
     }
     return this.strip(user);
   }

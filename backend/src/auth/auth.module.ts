@@ -19,12 +19,22 @@ import { JwtAuthGuard } from './jwt-auth.guard';
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
-        secret: config.get<string>('JWT_SECRET', 'dev-insecure-secret'),
-        signOptions: {
-          expiresIn: config.get<string>('JWT_EXPIRES_IN', '1h'),
-        },
-      }),
+      useFactory: (config: ConfigService) => {
+        const secret = config.get<string>('JWT_SECRET');
+        const isProd = config.get<string>('NODE_ENV') === 'production';
+        // Never boot production on the dev default — fail fast instead.
+        if (isProd && (!secret || secret === 'dev-insecure-secret')) {
+          throw new Error(
+            'JWT_SECRET must be set to a secure value in production',
+          );
+        }
+        return {
+          secret: secret || 'dev-insecure-secret',
+          signOptions: {
+            expiresIn: config.get<string>('JWT_EXPIRES_IN', '1h'),
+          },
+        };
+      },
     }),
   ],
   controllers: [AuthController],
