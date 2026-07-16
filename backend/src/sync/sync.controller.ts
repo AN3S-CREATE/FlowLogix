@@ -8,7 +8,8 @@ import { ActiveOrgId } from '../common/tenant/active-org-id.decorator';
  * field-level change log for one collection; the server merges each record by
  * Last-Write-Wins against the PostgreSQL master and returns the records where it
  * holds something newer, plus the ids it accepted and a fresh checkpoint. Tenant
- * scoping comes from the validated `X-Org-Id` header.
+ * scoping comes from the authenticated principal (the JWT bearer token), so the
+ * mobile client must send `Authorization: Bearer <token>`.
  */
 @Controller()
 export class SyncController {

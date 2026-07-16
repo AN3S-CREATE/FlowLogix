@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { AuthModule } from './auth/auth.module';
 import { DatabaseModule } from './database/database.module';
 import { OrganizationsModule } from './organizations/organizations.module';
 import { UsersModule } from './users/users.module';
@@ -24,6 +25,7 @@ import { HealthModule } from './health/health.module';
     }),
     ScheduleModule.forRoot(), // enables @Cron (position re-balance job)
     DatabaseModule,
+    AuthModule,
     OrganizationsModule,
     UsersModule,
     BoardsModule,
