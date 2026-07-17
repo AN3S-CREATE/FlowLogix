@@ -21,10 +21,22 @@ yet. Notable gaps between the rules and the current code:
   `backend/src/common/tenant/tenant-transaction.util.ts` — and the SQL policy
   (see the `AlignRlsTenantSetting` migration) must always match it; if the two
   ever diverge the fail-closed policy returns zero rows.
-- **RLS coverage.** RLS is currently enabled only on `boards`; `lists`, `cards`,
-  and `comments` are isolated transitively at the application layer via
-  `TenantAccessService`. Extending DB-level RLS to those tables (they have no
-  `org_id` column, so policies must join up to the owning board) is future work.
+- **RLS coverage.** DB-level RLS now covers `boards`, `lists`, `cards`, and
+  `comments` (`.cursorrules` §1). `lists`/`cards`/`comments` have no `org_id`
+  column, so the `EnableRlsOnListsCardsComments` migration gives each a
+  chained-membership policy that checks the row's parent is visible under the
+  parent's own RLS (`lists.board_id IN (SELECT id FROM boards)`, `cards.list_id
+  IN (SELECT id FROM lists)`, `comments.card_id IN (SELECT id FROM cards)`).
+  Because each subquery is itself RLS-filtered, the single `boards` org check
+  propagates down the hierarchy — one source of truth, no per-table org column.
+  All three tables are `FORCE`d (the app connects as a non-owner role) and fail
+  closed to zero rows when the tenant isn't set, so every CRUD data query in
+  `ListsService`/`CardsService`/`CommentsService` runs through
+  `runInTenantContext`. The daily `PositionRebalanceService` scan is likewise
+  RLS-blind across orgs, so it iterates `organizations` (no RLS) inside one
+  advisory-locked transaction and `set_config`s the tenant before each org's
+  over-long-column scan. `TenantAccessService` remains as defense-in-depth for
+  uniform not-found semantics.
 - **Ordering.** Wired. `lists.position_idx` / `cards.position_idx` are Base62
   fractional-index `varchar` keys (the `MigratePositionIdxToFractional`
   migration converts + backfills existing rows in order). `PositionService`
