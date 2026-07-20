@@ -41,7 +41,8 @@ Collaborative multi-tenant Kanban platform (NestJS API + React SPA + RN offline 
 - Phase 4 Docs/observability/DevOps: **~90–93/100** (est.) — alerts, sync→WS, delta-pull; see `phase4-docs-observability-devops.md`.
 - Phase 5 Final validation: **92/100** — see `phase5-final-readiness.md`.
 - Phase 5b Gap closure: **97/100** — see `phase5b-gap-closure.md`.
-- Phase 5c Nest 11: **99/100** — see `phase5c-nest11.md` (not 100; live HA remain).
+- Phase 5c Nest 11: **99/100** — see `phase5c-nest11.md`.
+- Phase 5d HA drill: **100/100** — see `phase5d-ha-drill.md` + `deploy/HA-TABLETOP.md`.
 
 ## Frontend API mode (Phase 2)
 

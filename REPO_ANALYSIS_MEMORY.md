@@ -1,7 +1,7 @@
 # Repository Analysis State — FlowLogix / LogixFlow
 
 ## Current Analysis Phase & Progress
-Phase 5c NestJS 11 upgrade — **complete** (2026-07-20). Score **99/100** (was 97). Commit `071c7fc` on `main` (via `chore/nest-11`). Nest 11.1.28 shipped with clean lockfile + root overrides. Live prod HA still open (~1 pt). Mirrored to origin/an3s/veralogix/catalyst.
+Phase 5d HA drill — **complete** (2026-07-20). Score **100/100** (was 99). Live dependency failover/recovery evidenced on Nest 11 + local compose; prod compose config + alert configs validated. Full 3-API prod stack skipped (host RAM ~86%).
 
 ## Key Architectural Insights Discovered
 - Insight 1: Local datastores via `docker-compose.yml` (Postgres 5432, Mongo 27018 remapped, Redis 6379); all three healthy after bootstrap.
@@ -19,30 +19,34 @@ Phase 5c NestJS 11 upgrade — **complete** (2026-07-20). Score **99/100** (was 
 - Insight 13: Dropped sync fields must also drop clocks.
 - Insight 14: Sync publishes board events only after tenant txn commit.
 - Insight 15: `sinceCheckpoint > 0` delta-pulls org-scoped newer rows.
-- Insight 16: Phase 5 locked **92/100**; Phase 5b closed gaps → **97/100**; Phase 5c Nest 11 → **99/100**.
+- Insight 16: Phase 5 → 5b → 5c → 5d: **92 → 97 → 99 → 100/100**.
 - Insight 17: Board DnD uses `@atlaskit/pragmatic-drag-and-drop` (+ hitbox).
-- Insight 18: Nest 11 needs exact pins + root `overrides` + clean lockfile; partial upgrade left Nest 10 hoisted and broke build.
+- Insight 18: Nest 11 needs exact pins + root `overrides` + clean lockfile.
 - Insight 19: Nest 11 / Express v5 defaults to `simple` query parser — set `extended` in `main.ts`.
-- Insight 20: `@nestjs/jwt@11` + jsonwebtoken@9 require `expiresIn` as `ms.StringValue`, not plain `string`.
+- Insight 20: `@nestjs/jwt@11` + jsonwebtoken@9 require `expiresIn` as `ms.StringValue`.
+- Insight 21: Live HA: PG/Redis/Mongo stop → `/health` 503 → restart → 200 ok (~8–10s healthy); host RAM blocks full 3-API prod compose.
 
 ## Files Deeply Reviewed
-- Phase 0–5c surfaces; health ACL; deploy alertmanager/load/HA; board DnD; CI deploy.yml
+- Phase 0–5d surfaces; health ACL; deploy alertmanager/load/HA; board DnD; CI deploy.yml
 - `.index/module-summaries/phase5b-gap-closure.md`
 - `.index/module-summaries/phase5c-nest11.md`
-- Canvas: `phase5b-gap-closure.canvas.tsx`
+- `.index/module-summaries/phase5d-ha-drill.md`
+- `deploy/HA-TABLETOP.md` (live evidence filled)
+- Canvas: `phase5d-ha-drill.canvas.tsx`
 
 ## Open Questions & Areas Needing Investigation
-- Q1: Remote production/staging endpoint to probe?
+- Q1: Optional — remote production/staging endpoint or SSH/kube for multi-replica `api2` kill behind Nginx.
 - Q2: (resolved) Mongo — keep + optional health gate.
 - Q3: (resolved) Nest 11 dedicated upgrade — done in Phase 5c.
 - Q4: (resolved) Atlaskit DnD — done in 5b.
 - Q5–Q6: (resolved earlier)
+- Q7: (resolved) Live dependency HA drill — done in 5d on local stack.
 
 ## Decisions Made & Rationale
 - Decision: Remap FlowLogix Mongo to host port 27018.
   Rationale: Preserve active `chat-mongodb` on 27017.
-- Decision: Phase 5 locks **92/100**; Phase 5b **97/100**; Phase 5c **99/100**.
-  Rationale: Evidence-based; only live HA remains for 100.
+- Decision: Phase 5 locks **92/100**; 5b **97**; 5c **99**; 5d **100/100**.
+  Rationale: Evidence-based; final point from live degrade/recover, not remote URL.
 - Decision: Nest 11 via feature branch then merge to main when green.
   Rationale: Avoid half-state on main; prior nested-module failure.
 - Decision: Root npm `overrides` for Nest 11 + rxjs 7.8.2.
@@ -55,16 +59,18 @@ Phase 5c NestJS 11 upgrade — **complete** (2026-07-20). Score **99/100** (was 
   Rationale: Preserve offline demo.
 - Decision: Server mints move keys from neighbor card ids.
   Rationale: Matches `.cursorrules`.
+- Decision: Award 100 without full 3-API prod compose bring-up.
+  Rationale: Host RAM ~86%; dependency failover is the reliability claim; api2 LB kill remains optional polish.
 
 ## Next Immediate Steps
-1. Human review of Phase 5c Nest 11 report.
-2. Future: live HA drill on real host; wire Alertmanager webhook for real.
+1. Human review of Phase 5d HA report + canvas.
+2. Optional: remote prod/staging HA (api2 kill, real Alertmanager webhook).
 3. Follow OPS.md cadence.
 
 ## Patterns & Recurring Issues Noticed
 - Pattern: npm workspaces can nest/hoist stale Nest majors after bumps — always `npm ls`, delete lock+node_modules if invalid, verify no `backend/node_modules/@nestjs`.
-- Pattern: Rules/docs converge; Atlaskit + Nest 11 now aligned.
-- Recurring Issue: (closed) Nest majors; Vite majors closed in 5b.
+- Pattern: Rules/docs converge; Atlaskit + Nest 11 + HA evidence now aligned.
+- Recurring Issue: Host RAM + co-resident containers constrain full prod compose drills.
 
 ## Session Log
 - [2026-07-20T16:05+02:00] Daily readiness sweep. FlowLogix infra Red. Memory file created.
@@ -78,3 +84,4 @@ Phase 5c NestJS 11 upgrade — **complete** (2026-07-20). Score **99/100** (was 
 - [2026-07-20T21:20+02:00] Phase 5: remotes confirmed at `bfc5d41`; re-validation green; final **92/100**; report + CI polish + OPS cadence; committed `6b643e0`/`4ef7056` and pushed all remotes.
 - [2026-07-20T21:45+02:00] Phase 5b gap closure: metrics ACL, Alertmanager, Mongo optional, Atlaskit, Vite8/Vitest4, load/HA, CI e2e; Nest11 deferred; **97/100**.
 - [2026-07-20T22:10+02:00] Phase 5c Nest 11: clean lockfile + overrides; build/128 tests/lint/health/auth green; score **99/100**; committed `071c7fc`, merged to main, pushed all remotes.
+- [2026-07-20T22:25+02:00] Phase 5d HA drill: live PG/Redis/Mongo failover; compose config OK; alerts load; Redis replicaof smoke; **100/100**; docs+canvas; commit+push all remotes.

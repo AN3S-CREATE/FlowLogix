@@ -58,7 +58,7 @@ Topology:
 | `alertmanager` | Receives Prometheus alerts; webhook placeholder in `deploy/alertmanager/alertmanager.yml` |
 | `grafana` | Dashboards from `deploy/grafana/`; default UI port `${GRAFANA_PORT:-3001}` |
 
-HA notes + tabletop checklist: [`deploy/HA-TABLETOP.md`](HA-TABLETOP.md). Live prod failover requires a real host (not claimed without drill evidence).
+HA notes + live evidence: [`HA-TABLETOP.md`](HA-TABLETOP.md). Phase 5d (2026-07-20) recorded local dependency failover/recovery on Nest 11; full 3-replica edge stack still needs a dedicated host with free RAM.
 
 - Three API replicas behind Nginx; Socket.io fan-out needs Redis Pub/Sub (already wired).
 - Redis replica is read-only failover candidate; promote manually if master fails (no Sentinel in this compose).

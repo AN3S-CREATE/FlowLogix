@@ -12,3 +12,4 @@
 | 2026-07-20 | Phase 5 Final validation | Remotes confirmed Phase 4 SHAs; 119/21/48 tests + `/health` ok; final **92/100**; CI frontend Vitest + e2e stub; `phase5-final-readiness.md` + canvas. |
 | 2026-07-20 | Phase 5b Gap closure | Metrics ACL, Alertmanager, Mongo optional, Atlaskit DnD, Vite8/Vitest4, load/HA docs, real CI e2e; Nest11 deferred; **97/100**; `phase5b-gap-closure.md` + canvas. |
 | 2026-07-20 | Phase 5c Nest 11 | Backend Nest 11.1.28 + companions; root overrides; JWT/Express fixes; 128 Jest + build + `/health`/auth smoke; **99/100**; `phase5c-nest11.md`. |
+| 2026-07-20 | Phase 5d HA drill | Live PG/Redis/Mongo failover on Nest 11; prod compose config OK; promtool 6 rules; Redis replicaof smoke; **100/100**; `phase5d-ha-drill.md` + HA-TABLETOP evidence. |

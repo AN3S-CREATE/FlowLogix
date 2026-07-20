@@ -25,3 +25,4 @@ Living, queryable project context for humans and coding agents. Relative paths f
 | `module-summaries/phase5-final-readiness.md` | Phase 5 final validation scorecard (92/100) |
 | `module-summaries/phase5b-gap-closure.md` | Phase 5b gap closure scorecard (97/100) |
 | `module-summaries/phase5c-nest11.md` | Phase 5c NestJS 11 upgrade scorecard (99/100) |
+| `module-summaries/phase5d-ha-drill.md` | Phase 5d live HA drill scorecard (100/100) |

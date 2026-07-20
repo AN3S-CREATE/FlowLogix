@@ -21,7 +21,7 @@
 | `deploy/alertmanager/` | Alertmanager stub config (webhook placeholder) | Active |
 | `deploy/grafana/` | Dashboards + provisioning | Active |
 | `deploy/OPS.md` | Health/metrics/compose.prod/alerts/HA/load runbook | Active |
-| `deploy/HA-TABLETOP.md` | HA tabletop checklist (no live prod required) | Active |
+| `deploy/HA-TABLETOP.md` | HA tabletop checklist + Phase 5d live evidence | Active |
 | `deploy/load/` | Load/SLO smoke (Node + optional k6) | Active |
 | `deploy/certs/` | TLS certs mount target | Missing (expected empty until provisioned) |
 | `.github/workflows/deploy.yml` | CI verify + compose health e2e (workflow_dispatch) + GHCR push | Active |
@@ -35,6 +35,7 @@
 | `.index/module-summaries/phase5-final-readiness.md` | Phase 5 final validation + scorecard (**92/100**) | Active |
 | `.index/module-summaries/phase5b-gap-closure.md` | Phase 5b gap closure + scorecard (**97/100**) | Active |
 | `.index/module-summaries/phase5c-nest11.md` | Phase 5c NestJS 11 upgrade + scorecard (**99/100**) | Active |
+| `.index/module-summaries/phase5d-ha-drill.md` | Phase 5d live HA drill + scorecard (**100/100**) | Active |
 | `backend/src/common/filters/` | Global HTTP exception filter + Jest specs | Active |
 | `backend/src/**/*.spec.ts` | Jest unit tests (20 files / 128 tests) | Active |
 | `frontend/src/api/` | REST client, session, board hydrate/map | Active |

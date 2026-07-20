@@ -22,3 +22,4 @@
 | 2026-07-20 | Protect `/health/metrics` with `METRICS_SECRET` (prod fail-closed) | `/health` stays public for LB |
 | 2026-07-20 | Phase 5c: Nest 11 via `chore/nest-11` then merge to main → **99/100** | Exact pins + root overrides; clean lockfile avoids nested Nest/rxjs |
 | 2026-07-20 | Express v5: set `query parser` to `extended` in `main.ts` | Preserve nested query parsing vs Express v5 default `simple` |
+| 2026-07-20 | Phase 5d: award **100/100** after live dependency failover drill on local Nest 11 + compose | Evidence of 503→recover on PG/Redis/Mongo; full 3-API stack deferred for RAM |

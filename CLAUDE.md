@@ -138,7 +138,12 @@ yet. Notable gaps between the rules and the current code:
 - **Phase 5c Nest 11 (2026-07-20).** Backend on Nest **11.1.28** (+ config 4 /
   jwt 11 / typeorm 11 / schedule 6 / throttler 6). Express v5 query parser set to
   `extended`; JWT `expiresIn` typed as `ms.StringValue`. Score **99/100** — see
-  `phase5c-nest11.md`. Not 100: live prod HA drill only.
+  `phase5c-nest11.md`.
+- **Phase 5d HA drill (2026-07-20).** Live postgres/redis/mongo stop→`/health`
+  503→recover 200 on Nest 11 + local compose; prod compose config OK; promtool
+  6 rules + Alertmanager config SUCCESS; isolated Redis replicaof smoke. Full
+  3-API prod stack skipped (host RAM). Score **100/100** — see
+  `phase5d-ha-drill.md` + `deploy/HA-TABLETOP.md`.
 
 When you implement any of the above, follow `.cursorrules` and update this
 status list.
