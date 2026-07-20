@@ -1,7 +1,7 @@
 # Repository Analysis State — FlowLogix / LogixFlow
 
 ## Current Analysis Phase & Progress
-Phase 5d HA drill — **complete** (2026-07-20). Score **100/100** (was 99). Commit `27fd445` on `main`. Live dependency failover/recovery evidenced on Nest 11 + local compose; prod compose config + alert configs validated. Full 3-API prod stack skipped (host RAM ~86%). Mirrored to origin/an3s/veralogix/catalyst.
+Phase 5d HA drill — **complete** (2026-07-20). Score **100/100**. Optional live **prod** HA (`api2` behind LB) — **blocked on credentials / no reachable FlowLogix endpoint** (probed 2026-07-20). No fabricated drill.
 
 ## Key Architectural Insights Discovered
 - Insight 1: Local datastores via `docker-compose.yml` (Postgres 5432, Mongo 27018 remapped, Redis 6379); all three healthy after bootstrap.
@@ -35,7 +35,7 @@ Phase 5d HA drill — **complete** (2026-07-20). Score **100/100** (was 99). Com
 - Canvas: `phase5d-ha-drill.canvas.tsx`
 
 ## Open Questions & Areas Needing Investigation
-- Q1: Optional — remote production/staging endpoint or SSH/kube for multi-replica `api2` kill behind Nginx.
+- Q1: **BLOCKED on credentials (2026-07-20)** — optional live prod HA (`api2` kill behind LB). No FlowLogix staging/prod API URL reachable; example `app.veralogix.co.za` does not resolve; `api.veralogix.co.za` is Apache 404 on `/health` (not Nest). Local `.env.prod` is localhost stub. Docker Desktop local only; empty kube; SSH aliases `VeraCore`/`TV-Box` exist but are **not** confirmed FlowLogix ops paths — do not use without user OK.
 - Q2: (resolved) Mongo — keep + optional health gate.
 - Q3: (resolved) Nest 11 dedicated upgrade — done in Phase 5c.
 - Q4: (resolved) Atlaskit DnD — done in 5b.
@@ -63,8 +63,8 @@ Phase 5d HA drill — **complete** (2026-07-20). Score **100/100** (was 99). Com
   Rationale: Host RAM ~86%; dependency failover is the reliability claim; api2 LB kill remains optional polish.
 
 ## Next Immediate Steps
-1. Human review of Phase 5d HA report + canvas.
-2. Optional: remote prod/staging HA (api2 kill, real Alertmanager webhook).
+1. Await user decision for optional live prod HA: API base URL + replica access + api2-stop permission + maintenance window.
+2. Until then: no further prod HA work; score remains **100/100** on local Phase 5d evidence.
 3. Follow OPS.md cadence.
 
 ## Patterns & Recurring Issues Noticed
@@ -85,3 +85,4 @@ Phase 5d HA drill — **complete** (2026-07-20). Score **100/100** (was 99). Com
 - [2026-07-20T21:45+02:00] Phase 5b gap closure: metrics ACL, Alertmanager, Mongo optional, Atlaskit, Vite8/Vitest4, load/HA, CI e2e; Nest11 deferred; **97/100**.
 - [2026-07-20T22:10+02:00] Phase 5c Nest 11: clean lockfile + overrides; build/128 tests/lint/health/auth green; score **99/100**; committed `071c7fc`, merged to main, pushed all remotes.
 - [2026-07-20T22:25+02:00] Phase 5d HA drill: live PG/Redis/Mongo failover; compose config OK; alerts load; Redis replicaof smoke; **100/100**; docs+canvas; committed `27fd445`, pushed all remotes.
+- [2026-07-20T22:27+02:00] Optional live prod HA probe: **blocked**. No FlowLogix public `/health`; no confirmed SSH/kube/docker prod access. Ask-list recorded; no drill, no commit.
