@@ -21,7 +21,7 @@
 | `deploy/grafana/` | Dashboards + provisioning | Active |
 | `deploy/OPS.md` | Health/metrics/compose.prod/alerts runbook | Active |
 | `deploy/certs/` | TLS certs mount target | Missing (expected empty until provisioned) |
-| `.github/workflows/deploy.yml` | Deploy workflow | Active |
+| `.github/workflows/deploy.yml` | CI verify (backend Jest, frontend Vitest+build, mobile Vitest) + optional e2e stub + GHCR push | Active |
 | `REPO_ANALYSIS_MEMORY.md` | Cross-session agent memory | Active |
 | `.index/` | Agent context index | Active |
 | `.index/module-summaries/phase0-readiness.md` | Phase 0 readiness audit deliverable (60/100) | Active |
@@ -37,4 +37,3 @@
 | `frontend/.env.example` | `VITE_API_URL` / WS / board id template | Active |
 | `frontend/src/**/*.test.ts` | Vitest store/mutation/mapBoard tests (3 files / 21) | Active |
 | `mobile/src/**/*.test.ts` | Vitest CRDT/sync/upload tests (5 files / 48) | Active |
-| `.github/workflows/deploy.yml` | CI verify (incl. frontend Vitest) + optional e2e stub + GHCR push | Active |
