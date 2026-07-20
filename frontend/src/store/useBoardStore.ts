@@ -164,6 +164,14 @@ export const useBoardStore = create<BoardStore>((set, get) => ({
       // Targeted rollback: pull the card back out of the target list and drop
       // it at its original index, leaving any other cards' moves untouched.
       set((state) => {
+        // The optimistic move cleared this card's key. If it's re-keyed (or the
+        // card is gone) by the time the persist rejects, a peer's `card.moved`
+        // (or delete) landed while we were in flight — that's a confirmed,
+        // authoritative change, so surface the error without clobbering it.
+        const current = state.cards[cardId];
+        if (!current || current.positionIdx !== undefined) {
+          return { moveError: err instanceof Error ? err.message : 'Move failed' };
+        }
         const lists = state.lists.map((l) => ({ ...l, cardIds: [...l.cardIds] }));
         const from = lists.find((l) => l.id === fromListId);
         const to = lists.find((l) => l.id === toListId);
@@ -173,14 +181,15 @@ export const useBoardStore = create<BoardStore>((set, get) => ({
           to.cardIds.splice(currentIndex, 1);
           from.cardIds.splice(originalIndex, 0, cardId);
         }
-        // Restore the server key the optimistic move cleared, so the reverted
-        // card stays a valid ordering reference for a later peer `card.moved`.
-        const reverted = state.cards[cardId];
+        // Restore the server key the optimistic move cleared — but only when we
+        // actually reverted the list position. If `currentIndex === -1` the card
+        // was moved again before this persist failed, so restoring the old key
+        // would clobber the newer in-flight move's cleared state.
         const cards =
-          reverted && reverted.positionIdx !== originalPositionIdx
+          currentIndex !== -1 && originalPositionIdx !== undefined
             ? {
                 ...state.cards,
-                [cardId]: { ...reverted, positionIdx: originalPositionIdx },
+                [cardId]: { ...current, positionIdx: originalPositionIdx },
               }
             : state.cards;
         return {

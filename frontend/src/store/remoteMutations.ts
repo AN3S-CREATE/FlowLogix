@@ -62,7 +62,7 @@ export function reconcileRemoteMutation(
       // A move frame with no target key is malformed/unplaceable — the backend
       // owns ordering, so resync rather than guessing a slot (falling back to
       // an empty key would silently drop the card at index 0).
-      if (!cardId || !listId || positionIdx === undefined) {
+      if (!cardId || !listId || typeof positionIdx !== 'string') {
         return { needsResync: true };
       }
       const card = state.cards[cardId];
