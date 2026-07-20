@@ -90,4 +90,4 @@ export const seedLists: List[] = [
   { id: 'l2', title: 'In Progress', cardIds: ['c1', 'c5'] },
   { id: 'l3', title: 'Review', cardIds: ['c6'] },
   { id: 'l4', title: 'Done', cardIds: ['c4'] },
-]);
+];

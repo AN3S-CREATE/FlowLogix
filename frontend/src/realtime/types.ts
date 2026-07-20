@@ -16,7 +16,8 @@ export type BoardMutationType =
 export interface BoardMutationPayload {
   cardId?: string;
   listId?: string;
-  positionIdx?: number;
+  /** Base62 fractional-index key of the moved item (server-assigned, a string). */
+  positionIdx?: string;
 }
 
 export interface BoardMutationEnvelope {
