@@ -105,6 +105,15 @@ describe('reconcileRemoteMutation — card.moved', () => {
     );
     expect(patch.needsResync).toBe(true);
   });
+
+  it('asks for a resync when the move frame carries no key', () => {
+    const patch = reconcileRemoteMutation(
+      baseState(),
+      frame('card.moved', { cardId: 'c1', listId: 'l2' }),
+    );
+    expect(patch.needsResync).toBe(true);
+    expect(patch.lists).toBeUndefined();
+  });
 });
 
 describe('reconcileRemoteMutation — deletes', () => {

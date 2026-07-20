@@ -59,7 +59,12 @@ export function reconcileRemoteMutation(
   switch (type) {
     case 'card.moved': {
       const { cardId, listId, positionIdx } = payload;
-      if (!cardId || !listId) return { needsResync: true };
+      // A move frame with no target key is malformed/unplaceable — the backend
+      // owns ordering, so resync rather than guessing a slot (falling back to
+      // an empty key would silently drop the card at index 0).
+      if (!cardId || !listId || positionIdx === undefined) {
+        return { needsResync: true };
+      }
       const card = state.cards[cardId];
       const target = state.lists.find((l) => l.id === listId);
       // We can't place a card we've never seen, or into a list we don't have.
@@ -76,7 +81,7 @@ export function reconcileRemoteMutation(
       const index = insertionIndexForKey(
         targetAfter!.cardIds,
         state.cards,
-        positionIdx ?? '',
+        positionIdx,
       );
       const lists = withoutCard.map((l) =>
         l.id === listId
@@ -90,10 +95,7 @@ export function reconcileRemoteMutation(
             }
           : l,
       );
-      const cards =
-        positionIdx !== undefined
-          ? { ...state.cards, [cardId]: { ...card, positionIdx } }
-          : state.cards;
+      const cards = { ...state.cards, [cardId]: { ...card, positionIdx } };
       return { lists, cards };
     }
 
