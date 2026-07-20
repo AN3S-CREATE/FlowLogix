@@ -1,7 +1,7 @@
 # Repository Analysis State — FlowLogix / LogixFlow
 
 ## Current Analysis Phase & Progress
-Phase 5d HA drill — **complete** (2026-07-20). Score **100/100** (was 99). Live dependency failover/recovery evidenced on Nest 11 + local compose; prod compose config + alert configs validated. Full 3-API prod stack skipped (host RAM ~86%).
+Phase 5d HA drill — **complete** (2026-07-20). Score **100/100** (was 99). Commit `27fd445` on `main`. Live dependency failover/recovery evidenced on Nest 11 + local compose; prod compose config + alert configs validated. Full 3-API prod stack skipped (host RAM ~86%). Mirrored to origin/an3s/veralogix/catalyst.
 
 ## Key Architectural Insights Discovered
 - Insight 1: Local datastores via `docker-compose.yml` (Postgres 5432, Mongo 27018 remapped, Redis 6379); all three healthy after bootstrap.
@@ -84,4 +84,4 @@ Phase 5d HA drill — **complete** (2026-07-20). Score **100/100** (was 99). Liv
 - [2026-07-20T21:20+02:00] Phase 5: remotes confirmed at `bfc5d41`; re-validation green; final **92/100**; report + CI polish + OPS cadence; committed `6b643e0`/`4ef7056` and pushed all remotes.
 - [2026-07-20T21:45+02:00] Phase 5b gap closure: metrics ACL, Alertmanager, Mongo optional, Atlaskit, Vite8/Vitest4, load/HA, CI e2e; Nest11 deferred; **97/100**.
 - [2026-07-20T22:10+02:00] Phase 5c Nest 11: clean lockfile + overrides; build/128 tests/lint/health/auth green; score **99/100**; committed `071c7fc`, merged to main, pushed all remotes.
-- [2026-07-20T22:25+02:00] Phase 5d HA drill: live PG/Redis/Mongo failover; compose config OK; alerts load; Redis replicaof smoke; **100/100**; docs+canvas; commit+push all remotes.
+- [2026-07-20T22:25+02:00] Phase 5d HA drill: live PG/Redis/Mongo failover; compose config OK; alerts load; Redis replicaof smoke; **100/100**; docs+canvas; committed `27fd445`, pushed all remotes.
