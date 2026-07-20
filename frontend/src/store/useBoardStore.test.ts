@@ -1,7 +1,21 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { useBoardStore } from './useBoardStore';
+import { seedCards, seedLists } from './seed';
 import { setPersistFailureRate } from './persistence';
 import { BoardMutationEnvelope } from '../realtime/types';
+
+// The store is a module singleton, so reset it to the pristine seed before each
+// test (the reducers are immutable, so the seed exports are never mutated).
+beforeEach(() => {
+  useBoardStore.setState({
+    lists: seedLists,
+    cards: seedCards,
+    moveVersions: {},
+    moveError: null,
+    needsResync: false,
+    connectionStatus: 'idle',
+  });
+});
 
 afterEach(() => setPersistFailureRate(0));
 
@@ -74,7 +88,26 @@ describe('moveCard rollback', () => {
       l.cardIds.includes('c1'),
     ).length;
     expect(appearances).toBe(1);
+    // Deterministic (version-based, not timing-based): the stale first move is
+    // skipped and only the latest move (p2) rolls back, landing c1 in l1.
     expect(after.lists.find((l) => l.id === 'l1')!.cardIds).toContain('c1');
+    expect(after.moveError).toBeTruthy();
+  });
+
+  it('a same-list reorder is not clobbered by an earlier failed reorder', async () => {
+    setPersistFailureRate(1);
+    const s = useBoardStore.getState();
+    // l2 seed = [c1, c5]. Reorder c1 to the end, then back to the front; both
+    // fail. The card never leaves l2, so the old `currentIndex !== -1` guard
+    // couldn't tell the moves apart — the version token can.
+    const p1 = s.moveCard('c1', 'l2', 'l2', 1);
+    const p2 = useBoardStore.getState().moveCard('c1', 'l2', 'l2', 0);
+    await Promise.all([p1, p2]);
+
+    const after = useBoardStore.getState();
+    const l2 = after.lists.find((l) => l.id === 'l2')!;
+    // Exactly one c1 — the stale first rollback did not duplicate or clobber it.
+    expect(l2.cardIds.filter((id) => id === 'c1')).toHaveLength(1);
     expect(after.moveError).toBeTruthy();
   });
 });
