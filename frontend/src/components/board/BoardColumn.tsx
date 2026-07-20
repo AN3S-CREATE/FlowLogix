@@ -1,8 +1,9 @@
-import { useState } from 'react';
-import { Draggable, Droppable } from '@hello-pangea/dnd';
+import { useEffect, useRef, useState } from 'react';
+import { dropTargetForElements } from '@atlaskit/pragmatic-drag-and-drop/element/adapter';
 import { Card, List } from '../../store/types';
 import { useBoardStore } from '../../store/useBoardStore';
 import { CardTile } from './CardTile';
+import { isCardDragData, listDropType } from './cardDnd';
 
 interface BoardColumnProps {
   list: List;
@@ -14,8 +15,28 @@ export function BoardColumn({ list }: BoardColumnProps) {
   const addCard = useBoardStore((s) => s.addCard);
   const [draft, setDraft] = useState('');
   const [adding, setAdding] = useState(false);
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
+  const dropRef = useRef<HTMLDivElement | null>(null);
 
-  const submit = () => {
+  useEffect(() => {
+    const element = dropRef.current;
+    if (!element) return;
+
+    return dropTargetForElements({
+      element,
+      getData: (): Record<string | symbol, unknown> => ({
+        type: listDropType,
+        listId: list.id,
+      }),
+      canDrop: ({ source }) => isCardDragData(source.data),
+      onDragEnter: () => setIsDraggingOver(true),
+      onDrag: () => setIsDraggingOver(true),
+      onDragLeave: () => setIsDraggingOver(false),
+      onDrop: () => setIsDraggingOver(false),
+    });
+  }, [list.id]);
+
+  const submit = (): void => {
     if (draft.trim()) addCard(list.id, draft);
     setDraft('');
     setAdding(false);
@@ -32,57 +53,27 @@ export function BoardColumn({ list }: BoardColumnProps) {
         </span>
       </header>
 
-      <Droppable droppableId={list.id}>
-        {(provided, snapshot) => (
-          <div
-            ref={provided.innerRef}
-            {...provided.droppableProps}
-            // Active placeholder highlight: a 2px solid lime boundary on the
-            // drop target while a card hovers over it.
-            className={
-              'flex-1 space-y-2 overflow-y-auto rounded-lg border-2 px-2 py-2 transition-colors ' +
-              (snapshot.isDraggingOver
-                ? 'border-veralogix-lime bg-veralogix-lime/5'
-                : 'border-transparent')
-            }
-          >
-            {/*
-              Draggable indices must be consecutive integers starting at 0, so
-              drop any ids missing from the store *before* mapping to an index
-              rather than returning null mid-map (which would leave gaps).
-            */}
-            {list.cardIds
-              .map((cardId) => cards[cardId])
-              .filter((card): card is Card => Boolean(card))
-              .map((card, index) => (
-                <Draggable key={card.id} draggableId={card.id} index={index}>
-                  {(dp, ds) => (
-                    <div
-                      ref={dp.innerRef}
-                      {...dp.draggableProps}
-                      style={{
-                        ...dp.draggableProps.style,
-                        // Source card drops to 40% opacity while being dragged.
-                        opacity: ds.isDragging ? 0.4 : 1,
-                      }}
-                      className={
-                        'rounded-lg ' +
-                        (ds.isDragging ? 'ring-2 ring-veralogix-lime' : '')
-                      }
-                    >
-                      <CardTile
-                        card={card}
-                        isDragging={ds.isDragging}
-                        dragHandleProps={dp.dragHandleProps}
-                      />
-                    </div>
-                  )}
-                </Draggable>
-              ))}
-            {provided.placeholder}
-          </div>
-        )}
-      </Droppable>
+      <div
+        ref={dropRef}
+        className={
+          'flex-1 space-y-2 overflow-y-auto rounded-lg border-2 px-2 py-2 transition-colors ' +
+          (isDraggingOver
+            ? 'border-veralogix-lime bg-veralogix-lime/5'
+            : 'border-transparent')
+        }
+      >
+        {list.cardIds
+          .map((cardId) => cards[cardId])
+          .filter((card): card is Card => Boolean(card))
+          .map((card, index) => (
+            <CardTile
+              key={card.id}
+              card={card}
+              listId={list.id}
+              index={index}
+            />
+          ))}
+      </div>
 
       <div className="px-2 pb-3 pt-1">
         {adding ? (
@@ -93,8 +84,6 @@ export function BoardColumn({ list }: BoardColumnProps) {
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
-                  // Don't submit mid-IME composition (e.g. CJK input), where
-                  // Enter confirms the candidate rather than the card.
                   if (e.nativeEvent.isComposing) return;
                   e.preventDefault();
                   submit();

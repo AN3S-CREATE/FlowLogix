@@ -13,16 +13,36 @@ docker compose up -d
 | Check | Command / URL |
 |-------|----------------|
 | Compose health | `docker compose ps` — all services `healthy` |
-| API liveness | `GET http://localhost:3000/health` → `status: "ok"` when postgres/redis/mongo probes are up |
-| Prometheus text | `GET http://localhost:3000/health/metrics` (`@Public()`, scrapable) |
+| API liveness | `GET http://localhost:3000/health` → `status: "ok"` when required probes are up |
+| Prometheus text | `GET /health/metrics` — open in non-prod without secret; with `METRICS_SECRET` send `Authorization: Bearer …` or `X-Metrics-Secret` |
 
-`GET /health` returns **503** when any probe is down (`status: "degraded"`). Mongo is probe-only today (no domain collections); a bad `MONGO_URI` still fails the overall gate.
+`GET /health` returns **503** when any *required* probe is down (`status: "degraded"`).
+
+### Mongo keep-vs-retire
+
+Mongo is **probe-only** today (no domain Mongoose/collections). Decision: **keep** the optional dependency for a future document/attachment store, but allow prod to run without it:
+
+| Env | Behaviour |
+|-----|-----------|
+| `HEALTH_REQUIRE_MONGO=true` (default) | Mongo down → overall `/health` degraded (legacy behaviour) |
+| `HEALTH_REQUIRE_MONGO=false` | Mongo still probed + recorded in metrics; does **not** fail the gate. Postgres + Redis remain required. |
+
+### Metrics ACL
+
+| Env | Behaviour |
+|-----|-----------|
+| `METRICS_SECRET` set | Require Bearer or `X-Metrics-Secret` |
+| Unset + `NODE_ENV=production` | **401** (fail closed) |
+| Unset + non-production | Open scrape (local dev) |
+
+`/health` stays public for load balancers.
 
 ## Production stack (`docker-compose.prod.yml`)
 
-Requires a filled `.env.prod` from `.env.prod.example` (JWT, DB, Redis, Grafana admin, TLS paths). **Do not commit `.env.prod`.**
+Requires a filled `.env.prod` from `.env.prod.example` (JWT, `METRICS_SECRET`, DB, Redis, Grafana admin, TLS paths). **Do not commit `.env.prod`.**
 
 ```bash
+docker compose -f docker-compose.prod.yml --env-file .env.prod config   # validate
 docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
 ```
 
@@ -33,19 +53,20 @@ Topology:
 | `web` | Nginx TLS edge + SPA; round-robins `api1`–`api3` |
 | `api1`–`api3` | NestJS replicas (`NODE_ID` distinct for logs/metrics) |
 | `redis-master` / `redis-replica` | Pub/Sub + cache; APIs write to master |
-| `postgres` / `mongodb` | Datastores |
-| `prometheus` | Scrapes each API `/health/metrics` every 15s; evaluates `deploy/prometheus/alerts.yml` |
+| `postgres` / `mongodb` | Datastores (mongo optional via `HEALTH_REQUIRE_MONGO`) |
+| `prometheus` | Scrapes each API `/health/metrics` with Bearer `METRICS_SECRET`; evaluates `alerts.yml` |
+| `alertmanager` | Receives Prometheus alerts; webhook placeholder in `deploy/alertmanager/alertmanager.yml` |
 | `grafana` | Dashboards from `deploy/grafana/`; default UI port `${GRAFANA_PORT:-3001}` |
 
-HA notes (design only — verify on a real host before calling production-ready):
+HA notes + tabletop checklist: [`deploy/HA-TABLETOP.md`](HA-TABLETOP.md). Live prod failover requires a real host (not claimed without drill evidence).
 
 - Three API replicas behind Nginx; Socket.io fan-out needs Redis Pub/Sub (already wired).
 - Redis replica is read-only failover candidate; promote manually if master fails (no Sentinel in this compose).
 - Postgres is a single primary; take volume snapshots / managed DB for RPO.
 
-## Prometheus alerts
+## Prometheus alerts + Alertmanager
 
-Rules live in [`deploy/prometheus/alerts.yml`](prometheus/alerts.yml), loaded via `rule_files` in [`prometheus.yml`](prometheus/prometheus.yml). Compose mounts both files read-only into the Prometheus container.
+Rules: [`deploy/prometheus/alerts.yml`](prometheus/alerts.yml). Scrapes + alerting block: [`prometheus.yml`](prometheus/prometheus.yml) → `alertmanager:9093`.
 
 | Alert | Intent |
 |-------|--------|
@@ -56,15 +77,17 @@ Rules live in [`deploy/prometheus/alerts.yml`](prometheus/alerts.yml), loaded vi
 | `FlowLogixWebsocketPoolSaturated` | Pool >5000 for 10m |
 | `FlowLogixInstanceDown` | `up{job="flowlogix-api"} == 0` for 2m |
 
-**How to inspect without Alertmanager:** open Prometheus UI (add a published port locally if needed) → **Alerts**. Optional: configure Alertmanager + a webhook later; Grafana can also create contact points against the provisioned Prometheus datasource (`deploy/grafana/provisioning/datasources/datasource.yml`).
-
-Validate rule syntax offline:
+Alertmanager config: [`deploy/alertmanager/alertmanager.yml`](alertmanager/alertmanager.yml) — replace the placeholder webhook URL with Slack/PagerDuty/email. Until then, alerts still evaluate in Prometheus UI and land in Alertmanager's UI.
 
 ```bash
 # If promtool is installed:
 promtool check rules deploy/prometheus/alerts.yml
 promtool check config deploy/prometheus/prometheus.yml
 ```
+
+## Load / SLO smoke
+
+See [`deploy/load/README.md`](load/README.md) — Node `smoke.mjs` and optional k6. Not run on every CI push.
 
 ## Grafana
 
@@ -74,21 +97,21 @@ promtool check config deploy/prometheus/prometheus.yml
 
 ## CI images
 
-[`.github/workflows/deploy.yml`](../.github/workflows/deploy.yml) on `main`: lint/test backend + frontend (Vitest) + mobile, then push `backend`/`frontend` images to GHCR. Production hosts pull those tags into `docker-compose.prod.yml`.
+[`.github/workflows/deploy.yml`](../.github/workflows/deploy.yml) on `main`: lint/test backend + frontend (Vitest) + mobile, then push `backend`/`frontend` images to GHCR.
 
-Optional **E2E smoke stub**: workflow_dispatch with `run_e2e=true` prints the manual checklist (no remote staging URL in-repo yet).
+Optional **E2E smoke** (`workflow_dispatch` + `run_e2e=true`): validates `docker-compose.prod.yml` config, starts local datastores, builds backend, curls `GET /health` → `status: ok`.
 
 ## Suggested health-check cadence
 
 | Cadence | Check |
 |---------|--------|
-| **Continuous** | Prometheus scrapes `/health/metrics` (15s); evaluate `alerts.yml` |
+| **Continuous** | Prometheus scrapes `/health/metrics` (15s) with Bearer; Alertmanager receives firing alerts |
 | **Every deploy / PR to main** | CI `verify` (Jest + Vitest + frontend build) |
-| **Daily (ops)** | `GET /health` on each API replica → `status: ok`; skim Prometheus Alerts page |
-| **Weekly** | Grafana overview; confirm Redis memory/clients sane; spot-check WS join on a board |
-| **Monthly** | Compose.prod failover tabletop (kill one `apiN`, confirm Nginx still serves); review npm audit majors backlog; optional `workflow_dispatch` e2e stub checklist |
+| **Daily (ops)** | `GET /health` on each API replica → `status: ok`; skim Prometheus/Alertmanager |
+| **Weekly** | Grafana overview; Redis memory/clients; WS spot-check |
+| **Monthly** | [`HA-TABLETOP.md`](HA-TABLETOP.md) + npm audit majors review; optional `workflow_dispatch` e2e |
 | **After schema / sync changes** | Backend sync + health specs; smoke `POST /sync` + SPA move rollback |
 
 ## npm audit policy
 
-Do **not** run `npm audit fix --force` on Nest/Vite majors without a dedicated upgrade PR. Remaining critical/high findings are tracked in `.index/module-summaries/phase4-docs-observability-devops.md` and the Phase 5 readiness report (Nest 11 / Vite 8 / Vitest 4 backlog). Prefer `npm audit fix` (non-force) when it stays green.
+Do **not** run `npm audit fix --force` on Nest/Vite majors without a dedicated upgrade PR. Prefer incremental upgrades that keep CI green. Remaining Nest 11 / Vite 8 / Vitest 4 debt (if any) is tracked in `.index/module-summaries/phase5b-gap-closure.md`.

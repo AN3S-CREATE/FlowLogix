@@ -186,7 +186,8 @@ export const useBoardStore = create<BoardStore>((set, get) => ({
       const created = await apiCreateCard(listId, trimmed);
       const mapped = mapApiCard(created);
       set((state) => {
-        const { [tempId]: _removed, ...rest } = state.cards;
+        const rest = { ...state.cards };
+        delete rest[tempId];
         return {
           cards: { ...rest, [mapped.id]: mapped },
           lists: state.lists.map((l) =>
@@ -203,7 +204,8 @@ export const useBoardStore = create<BoardStore>((set, get) => ({
       });
     } catch (err) {
       set((state) => {
-        const { [tempId]: _removed, ...rest } = state.cards;
+        const rest = { ...state.cards };
+        delete rest[tempId];
         return {
           cards: rest,
           lists: state.lists.map((l) =>

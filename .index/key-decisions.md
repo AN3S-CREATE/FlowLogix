@@ -17,3 +17,6 @@
 | 2026-07-20 | Phase 3 = sync `positionIdx`/parents + offline inserts; drop invalid keys with clocks | P7; fail-closed multi-tenant; v1 content-only clients compatible |
 | 2026-07-20 | Phase 4 = Prometheus alerts + OPS.md; sync→WS after commit; sinceCheckpoint delta-pull; defer Atlaskit + npm majors | High-ROI without live prod creds; keep main shippable |
 | 2026-07-20 | Phase 5 final score **92/100** (not 100); CI frontend Vitest + e2e stub; OPS cadence | Honest shortfall; small DevOps closes without staging host |
+| 2026-07-20 | Phase 5b: metrics ACL, Alertmanager, optional Mongo, Atlaskit DnD, Vite8/Vitest4, load suite, HA tabletop, real CI e2e → **97/100** | Nest 11 deferred (lockfile); live HA still needs host |
+| 2026-07-20 | Keep Mongo in stack; `HEALTH_REQUIRE_MONGO=false` optional gate | Probe-only today; least-breaking vs retire |
+| 2026-07-20 | Protect `/health/metrics` with `METRICS_SECRET` (prod fail-closed) | `/health` stays public for LB |

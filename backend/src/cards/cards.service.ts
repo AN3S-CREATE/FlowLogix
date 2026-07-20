@@ -33,7 +33,11 @@ export class CardsService {
     // `cards` has RLS: the insert (and last-key lookup) must run with the tenant
     // set on the same transaction.
     const card = await runInTenantContext(this.dataSource, orgId, async (m) => {
-      const positionIdx = await this.resolvePosition(m, listId, dto.positionIdx);
+      const positionIdx = await this.resolvePosition(
+        m,
+        listId,
+        dto.positionIdx,
+      );
       return m.save(Card, m.create(Card, { ...dto, listId, positionIdx }));
     });
     // Broadcast after commit, fire-and-forget: the write is authoritative and
@@ -84,36 +88,32 @@ export class CardsService {
     const {
       beforeCardId,
       afterCardId,
-      listId: _listId,
+      listId: ignoredListId,
       positionIdx: dtoPositionIdx,
       ...contentFields
     } = dto;
+    void ignoredListId;
 
     const wantsNeighborPlacement =
       beforeCardId !== undefined || afterCardId !== undefined;
 
     let nextPositionIdx: string | undefined = dtoPositionIdx;
     if (wantsNeighborPlacement) {
-      nextPositionIdx = await runInTenantContext(
-        this.dataSource,
-        orgId,
-        (m) =>
-          this.resolvePositionFromNeighbors(
-            m,
-            id,
-            targetListId,
-            beforeCardId,
-            afterCardId,
-          ),
+      nextPositionIdx = await runInTenantContext(this.dataSource, orgId, (m) =>
+        this.resolvePositionFromNeighbors(
+          m,
+          id,
+          targetListId,
+          beforeCardId,
+          afterCardId,
+        ),
       );
     } else if (dtoPositionIdx !== undefined) {
       this.positions.assertValid(dtoPositionIdx);
     } else if (dto.listId !== undefined && dto.listId !== fromListId) {
       // Cross-list move without an explicit key or neighbors → append.
-      nextPositionIdx = await runInTenantContext(
-        this.dataSource,
-        orgId,
-        (m) => this.resolvePosition(m, targetListId, undefined),
+      nextPositionIdx = await runInTenantContext(this.dataSource, orgId, (m) =>
+        this.resolvePosition(m, targetListId, undefined),
       );
     }
 
@@ -126,17 +126,12 @@ export class CardsService {
     );
 
     // A change of list or position is a "move"; anything else is a plain update.
-    const moved =
-      saved.listId !== fromListId || nextPositionIdx !== undefined;
-    void this.boardEvents.emit(
-      moved ? 'card.moved' : 'card.updated',
-      boardId,
-      {
-        cardId: saved.id,
-        listId: saved.listId,
-        positionIdx: saved.positionIdx,
-      },
-    );
+    const moved = saved.listId !== fromListId || nextPositionIdx !== undefined;
+    void this.boardEvents.emit(moved ? 'card.moved' : 'card.updated', boardId, {
+      cardId: saved.id,
+      listId: saved.listId,
+      positionIdx: saved.positionIdx,
+    });
     return saved;
   }
 
@@ -216,7 +211,9 @@ export class CardsService {
     const card = await this.tenantAccess.assertCardInOrg(id, orgId);
     const boardId = card.list.boardId;
     const listId = card.listId;
-    await runInTenantContext(this.dataSource, orgId, (m) => m.remove(Card, card));
+    await runInTenantContext(this.dataSource, orgId, (m) =>
+      m.remove(Card, card),
+    );
     void this.boardEvents.emit('card.deleted', boardId, {
       cardId: id,
       listId,

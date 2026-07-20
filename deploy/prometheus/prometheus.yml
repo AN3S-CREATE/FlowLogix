@@ -1,9 +1,8 @@
 # Prometheus scrape configuration for the FlowLogix production stack.
 # Reachable inside the `backend` docker network by service name.
 #
-# Alert rules: deploy/prometheus/alerts.yml (mounted read-only alongside this
-# file in docker-compose.prod.yml). Evaluate in Prometheus UI → Alerts; optional
-# Alertmanager webhook is out of band (see deploy/OPS.md).
+# Alert rules: deploy/prometheus/alerts.yml
+# Alertmanager: deploy/alertmanager/alertmanager.yml (wired below)
 
 global:
   scrape_interval: 15s
@@ -14,12 +13,21 @@ global:
 rule_files:
   - /etc/prometheus/alerts.yml
 
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['alertmanager:9093']
+
 scrape_configs:
   # NestJS API replicas. Each exposes the app's Prometheus registry at
   # /health/metrics (dependency up/down, HTTP latency histogram, active
   # Socket.io sessions, websocket pool size, plus node process CPU/memory).
+  # Scrapes send Bearer METRICS_SECRET (see credentials_file).
   - job_name: flowlogix-api
     metrics_path: /health/metrics
+    authorization:
+      type: Bearer
+      credentials_file: /etc/prometheus/metrics_bearer_token
     static_configs:
       - targets:
           - api1:3000

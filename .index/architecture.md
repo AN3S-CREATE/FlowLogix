@@ -23,8 +23,9 @@ Collaborative multi-tenant Kanban platform (NestJS API + React SPA + RN offline 
 
 ## Health
 
-- `GET /health` — Postgres + Redis + Mongo probes; 503 if degraded.
-- `GET /health/metrics` — Prometheus exposition (`@Public()`, `@SkipThrottle()`).
+- `GET /health` — Postgres + Redis + Mongo probes; 503 if any *required* probe is down.
+- Mongo optional via `HEALTH_REQUIRE_MONGO=false` (still probed/recorded; keep for future docs store).
+- `GET /health/metrics` — Prometheus exposition; ACL via `METRICS_SECRET` (Bearer / `X-Metrics-Secret`). Public only in non-prod when secret unset.
 
 ## HTTP hardening (Phase 1)
 
@@ -38,7 +39,8 @@ Collaborative multi-tenant Kanban platform (NestJS API + React SPA + RN offline 
 - Phase 2 Core Hardening: **~76–80/100** (est.) — see `.index/module-summaries/phase2-core-hardening.md`.
 - Phase 3 Specialized uplift: **~84–88/100** (est.) — sync `positionIdx` + offline inserts; see `phase3-specialized-uplift.md`.
 - Phase 4 Docs/observability/DevOps: **~90–93/100** (est.) — alerts, sync→WS, delta-pull; see `phase4-docs-observability-devops.md`.
-- Phase 5 Final validation: **92/100** — see `phase5-final-readiness.md` (not 100; gaps documented).
+- Phase 5 Final validation: **92/100** — see `phase5-final-readiness.md`.
+- Phase 5b Gap closure: **97/100** — see `phase5b-gap-closure.md` (not 100; Nest 11 + live HA remain).
 
 ## Frontend API mode (Phase 2)
 

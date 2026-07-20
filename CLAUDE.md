@@ -87,9 +87,9 @@ yet. Notable gaps between the rules and the current code:
   (`frontend/src/realtime/useBoardSocket.ts`): org comes from the JWT session
   (fallback `VITE_ORG_ID`); WS URL from `VITE_WS_URL` or `VITE_API_URL`. Without
   `VITE_API_URL` the board still runs as an offline demo. Pure logic is
-  vitest-tested (`remoteMutations.test.ts`, `mapBoard.test.ts`). Remaining gap:
-  migrating drag-and-drop from `@hello-pangea/dnd` to the `.cursorrules`-specified
-  `@atlaskit/pragmatic-drag-and-drop` (deferred to Phase 5+).
+  vitest-tested (`remoteMutations.test.ts`, `mapBoard.test.ts`, `cardDnd.test.ts`).
+  Drag-and-drop uses `@atlaskit/pragmatic-drag-and-drop` (+ hitbox) with optimistic
+  `moveCard` + rollback (Phase 5b).
 - **Mobile offline-first sync.** Implemented in the `mobile/` workspace
   (`mobile/src/`). `crdt/` holds the LWW-CRDT primitives — a strictly-monotonic
   high-precision clock, an LWW register, an LWW-Element-Set, and a field-level
@@ -124,16 +124,17 @@ yet. Notable gaps between the rules and the current code:
   delta-pulls org-scoped rows whose clocks/tombstones exceed the checkpoint;
   list/card writes publish board realtime events after commit. Older clients
   that omit structural fields keep content-only merge behaviour.
-- **Observability / ops (Phase 4).** Prometheus scrapes `/health/metrics`;
-  alert rules in `deploy/prometheus/alerts.yml` (mounted by
-  `docker-compose.prod.yml`). Ops runbook: `deploy/OPS.md`. Remaining npm
-  critical/high still require Nest 11 / Vite 8 majors — do not `--force` on main.
-- **Phase 5 final readiness (2026-07-20).** Re-validated suites green (119 Jest /
-  21 frontend Vitest / 48 mobile Vitest; `GET /health` ok). Locked score
-  **92/100** — see `.index/module-summaries/phase5-final-readiness.md`. Not
-  100: Atlaskit DnD, Nest/Vite majors, live HA drill, Alertmanager, metrics
-  ACL, full compose e2e, load suite, Mongo keep-vs-retire. CI now runs
-  frontend Vitest; optional workflow_dispatch e2e smoke stub.
+- **Observability / ops (Phase 4–5b).** Prometheus scrapes `/health/metrics` with
+  Bearer `METRICS_SECRET`; Alertmanager wired from Prometheus (placeholder
+  webhook); alert rules in `deploy/prometheus/alerts.yml`. Ops: `deploy/OPS.md`,
+  HA tabletop `deploy/HA-TABLETOP.md`, load smoke `deploy/load/`. Vite 8 / Vitest 4
+  shipped; Nest 11 still deferred (workspace lockfile) — do not `--force` Nest on main.
+- **Phase 5 final readiness (2026-07-20).** Locked **92/100** — see
+  `phase5-final-readiness.md`.
+- **Phase 5b gap closure (2026-07-20).** Closed metrics ACL, Alertmanager, optional
+  Mongo health, Atlaskit DnD, CI compose health e2e, load suite, HA tabletop,
+  Vite 8/Vitest 4. Suites: **128** Jest / **23** frontend Vitest / **48** mobile.
+  Score **97/100** — see `phase5b-gap-closure.md`. Not 100: Nest 11 + live prod HA.
 
 When you implement any of the above, follow `.cursorrules` and update this
 status list.

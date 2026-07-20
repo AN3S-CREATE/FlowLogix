@@ -1,12 +1,20 @@
-import { DragDropContext, DropResult } from '@hello-pangea/dnd';
 import { useEffect } from 'react';
+import { monitorForElements } from '@atlaskit/pragmatic-drag-and-drop/element/adapter';
+import { extractClosestEdge } from '@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge';
+import { getReorderDestinationIndex } from '@atlaskit/pragmatic-drag-and-drop-hitbox/util/get-reorder-destination-index';
 import { useBoardStore } from '../../store/useBoardStore';
 import { BoardColumn } from './BoardColumn';
 import { isApiMode } from '../../api/config';
+import {
+  asCardDragData,
+  asListDropData,
+  isCardDragData,
+  isListDropData,
+} from './cardDnd';
 
 /**
- * Top-level board surface. Owns the drag context and translates
- * `@hello-pangea/dnd` drop results into optimistic store moves.
+ * Top-level board surface. Owns the Atlaskit pragmatic-drag-and-drop monitor
+ * and translates drops into optimistic store moves.
  */
 export function Board() {
   const lists = useBoardStore((s) => s.lists);
@@ -19,34 +27,67 @@ export function Board() {
   const refetchBoard = useBoardStore((s) => s.refetchBoard);
   const boardLoading = useBoardStore((s) => s.boardLoading);
 
-  // When a content frame (or sync gap) sets needsResync in API mode, pull a
-  // targeted board snapshot instead of asking the user to hard-reload.
   useEffect(() => {
     if (!needsResync || !isApiMode()) return;
     void refetchBoard();
   }, [needsResync, refetchBoard]);
 
-  const onDragStart = (start: { draggableId: string }): void => {
-    setDraggingCardId(start.draggableId);
-  };
+  useEffect(() => {
+    return monitorForElements({
+      canMonitor: ({ source }) => isCardDragData(source.data),
+      onDragStart: ({ source }) => {
+        const card = asCardDragData(source.data);
+        if (card) setDraggingCardId(card.cardId);
+      },
+      onDrop: ({ source, location }) => {
+        setDraggingCardId(null);
+        const dragged = asCardDragData(source.data);
+        if (!dragged) return;
 
-  const onDragEnd = (result: DropResult): void => {
-    setDraggingCardId(null);
-    const { draggableId, source, destination } = result;
-    if (!destination) return;
-    if (
-      destination.droppableId === source.droppableId &&
-      destination.index === source.index
-    ) {
-      return;
-    }
-    void moveCard(
-      draggableId,
-      source.droppableId,
-      destination.droppableId,
-      destination.index,
-    );
-  };
+        const targets = location.current.dropTargets;
+        if (targets.length === 0) return;
+
+        const { cardId, listId: fromListId, index: startIndex } = dragged;
+
+        const cardTarget = targets.find((t) => isCardDragData(t.data));
+        const listTarget = targets.find((t) => isListDropData(t.data));
+
+        let toListId: string;
+        let toIndex: number;
+
+        const cardDrop = cardTarget ? asCardDragData(cardTarget.data) : null;
+        if (cardDrop) {
+          toListId = cardDrop.listId;
+          const closestEdge = extractClosestEdge(cardTarget!.data);
+          if (fromListId === toListId) {
+            toIndex = getReorderDestinationIndex({
+              startIndex,
+              indexOfTarget: cardDrop.index,
+              closestEdgeOfTarget: closestEdge,
+              axis: 'vertical',
+            });
+          } else {
+            const targetIndex = cardDrop.index;
+            toIndex =
+              closestEdge === 'bottom' ? targetIndex + 1 : targetIndex;
+          }
+        } else {
+          const listDrop = listTarget ? asListDropData(listTarget.data) : null;
+          if (!listDrop) return;
+          toListId = listDrop.listId;
+          const destList = lists.find((l) => l.id === toListId);
+          toIndex = destList ? destList.cardIds.length : 0;
+          if (fromListId === toListId && toIndex > 0) {
+            toIndex = Math.max(0, toIndex - 1);
+          }
+        }
+
+        if (fromListId === toListId && toIndex === startIndex) return;
+
+        void moveCard(cardId, fromListId, toListId, toIndex);
+      },
+    });
+  }, [lists, moveCard, setDraggingCardId]);
 
   const onRefreshClick = (): void => {
     if (isApiMode()) {
@@ -58,7 +99,7 @@ export function Board() {
   };
 
   return (
-    <DragDropContext onDragStart={onDragStart} onDragEnd={onDragEnd}>
+    <>
       {needsResync && (
         <div
           role="status"
@@ -115,6 +156,6 @@ export function Board() {
           <BoardColumn key={list.id} list={list} />
         ))}
       </div>
-    </DragDropContext>
+    </>
   );
 }
