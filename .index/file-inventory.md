@@ -6,6 +6,8 @@
 | `docker-compose.yml` | Local Postgres/Mongo/Redis | Active |
 | `docker-compose.prod.yml` | Production multi-replica stack | Active |
 | `.env.example` | Local compose env template | Active |
+| `.env` | Local compose env (MONGO_PORT=27018); gitignored | Active |
+| `backend/.env` | Nest runtime env (MONGO_URI :27018); gitignored | Active |
 | `.env.prod.example` | Prod secrets template | Active |
 | `.cursorrules` | AI coding / brand / architecture rules | Active |
 | `CLAUDE.md` | Implementation status vs rules | Active |
