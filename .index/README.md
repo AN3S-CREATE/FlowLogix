@@ -22,3 +22,4 @@ Living, queryable project context for humans and coding agents. Relative paths f
 | `module-summaries/phase2-core-hardening.md` | Phase 2 SPA REST+JWT + needsResync refetch |
 | `module-summaries/phase3-specialized-uplift.md` | Phase 3 sync positionIdx + offline inserts |
 | `module-summaries/phase4-docs-observability-devops.md` | Phase 4 alerts, OPS, sync→WS, delta-pull |
+| `module-summaries/phase5-final-readiness.md` | Phase 5 final validation scorecard (92/100) |

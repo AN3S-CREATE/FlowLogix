@@ -74,8 +74,21 @@ promtool check config deploy/prometheus/prometheus.yml
 
 ## CI images
 
-[`.github/workflows/deploy.yml`](../.github/workflows/deploy.yml) on `main`: lint/test backend + frontend + mobile, then push `backend`/`frontend` images to GHCR. Production hosts pull those tags into `docker-compose.prod.yml`.
+[`.github/workflows/deploy.yml`](../.github/workflows/deploy.yml) on `main`: lint/test backend + frontend (Vitest) + mobile, then push `backend`/`frontend` images to GHCR. Production hosts pull those tags into `docker-compose.prod.yml`.
+
+Optional **E2E smoke stub**: workflow_dispatch with `run_e2e=true` prints the manual checklist (no remote staging URL in-repo yet).
+
+## Suggested health-check cadence
+
+| Cadence | Check |
+|---------|--------|
+| **Continuous** | Prometheus scrapes `/health/metrics` (15s); evaluate `alerts.yml` |
+| **Every deploy / PR to main** | CI `verify` (Jest + Vitest + frontend build) |
+| **Daily (ops)** | `GET /health` on each API replica → `status: ok`; skim Prometheus Alerts page |
+| **Weekly** | Grafana overview; confirm Redis memory/clients sane; spot-check WS join on a board |
+| **Monthly** | Compose.prod failover tabletop (kill one `apiN`, confirm Nginx still serves); review npm audit majors backlog; optional `workflow_dispatch` e2e stub checklist |
+| **After schema / sync changes** | Backend sync + health specs; smoke `POST /sync` + SPA move rollback |
 
 ## npm audit policy
 
-Do **not** run `npm audit fix --force` on Nest/Vite majors without a dedicated upgrade PR. Remaining critical/high findings are tracked in `.index/module-summaries/phase4-docs-observability-devops.md` (Nest 11 / Vite 8 / Vitest 4 backlog). Prefer `npm audit fix` (non-force) when it stays green.
+Do **not** run `npm audit fix --force` on Nest/Vite majors without a dedicated upgrade PR. Remaining critical/high findings are tracked in `.index/module-summaries/phase4-docs-observability-devops.md` and the Phase 5 readiness report (Nest 11 / Vite 8 / Vitest 4 backlog). Prefer `npm audit fix` (non-force) when it stays green.

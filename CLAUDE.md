@@ -128,6 +128,12 @@ yet. Notable gaps between the rules and the current code:
   alert rules in `deploy/prometheus/alerts.yml` (mounted by
   `docker-compose.prod.yml`). Ops runbook: `deploy/OPS.md`. Remaining npm
   critical/high still require Nest 11 / Vite 8 majors — do not `--force` on main.
+- **Phase 5 final readiness (2026-07-20).** Re-validated suites green (119 Jest /
+  21 frontend Vitest / 48 mobile Vitest; `GET /health` ok). Locked score
+  **92/100** — see `.index/module-summaries/phase5-final-readiness.md`. Not
+  100: Atlaskit DnD, Nest/Vite majors, live HA drill, Alertmanager, metrics
+  ACL, full compose e2e, load suite, Mongo keep-vs-retire. CI now runs
+  frontend Vitest; optional workflow_dispatch e2e smoke stub.
 
 When you implement any of the above, follow `.cursorrules` and update this
 status list.

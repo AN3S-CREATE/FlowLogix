@@ -1,7 +1,7 @@
 # Repository Analysis State — FlowLogix / LogixFlow
 
 ## Current Analysis Phase & Progress
-Phase 4 Documentation, Observability & DevOps — **complete** (2026-07-20). Alerts + OPS runbook; sync→realtime after commit; `sinceCheckpoint` delta-pull. Estimated readiness **~90–93/100** (from Phase 3 ~84–88). Phase 1 `bf50683`; Phase 2 `a000402`; Phase 3 `4fb971d`; Phase 4 `a1f30c0` (mirrored to origin/an3s/veralogix/catalyst).
+Phase 5 Final Validation & Production Readiness — **complete** (2026-07-20). Final score **92/100** (not 100). Phase 1 `bf50683`; Phase 2 `a000402`; Phase 3 `4fb971d`; Phase 4 `a1f30c0` / memory `bfc5d41`; Phase 5 commit after this update. All remotes had Phase 4 SHAs before Phase 5.
 
 ## Key Architectural Insights Discovered
 - Insight 1: Local datastores via `docker-compose.yml` (Postgres 5432, Mongo 27018 remapped, Redis 6379); all three healthy after bootstrap.
@@ -19,11 +19,12 @@ Phase 4 Documentation, Observability & DevOps — **complete** (2026-07-20). Ale
 - Insight 13: Dropped sync fields must also drop clocks — otherwise a high clock with a missing value wins LWW and wipes the server field.
 - Insight 14: Sync publishes board events only *after* tenant txn commit (parity with CRUD; Redis best-effort).
 - Insight 15: `sinceCheckpoint > 0` delta-pulls rows whose jsonb clocks or `sync_deleted_at` exceed the checkpoint (org-scoped, capped).
+- Insight 16: Phase 5 re-validation: 119/21/48 tests green; `/health` ok; auth 401 smoke; final readiness **92/100**.
 
 ## Files Deeply Reviewed
-- Phase 0–3 surfaces + Phase 4 sync/realtime/deploy
-- `backend/src/sync/sync.service.ts`, specs; `deploy/prometheus/*`, `deploy/OPS.md`
-- `.index/module-summaries/phase0-readiness.md` … `phase4-docs-observability-devops.md`
+- Phase 0–5 surfaces; sync/realtime/deploy; CI `deploy.yml`
+- `.index/module-summaries/phase0-readiness.md` … `phase5-final-readiness.md`
+- Canvas: `phase5-final-readiness.canvas.tsx`
 
 ## Open Questions & Areas Needing Investigation
 - Q1: Remote production/staging endpoint to probe?
@@ -31,12 +32,13 @@ Phase 4 Documentation, Observability & DevOps — **complete** (2026-07-20). Ale
 - Q3: Approve Nest 11 / Vitest 4 / Vite major upgrade PR for remaining audit critical/high?
 - Q4: When to schedule Atlaskit DnD migration?
 - Q5: (resolved) `/sync` writes publish board realtime events — yes, Phase 4.
+- Q6: (resolved) Phase 4 SHAs on all remotes — yes, before Phase 5.
 
 ## Decisions Made & Rationale
 - Decision: Remap FlowLogix Mongo to host port 27018.
   Rationale: Preserve active `chat-mongodb` on 27017.
-- Decision: Phase 0 baseline 60/100; Phase 1 = P2–P4 (+ light P6/P9); Phase 2 = P1+P5; Phase 3 = P7; Phase 4 = P10 alerts/docs + sync WS + delta-pull.
-  Rationale: Incremental readiness.
+- Decision: Phase 0 baseline 60/100; Phases 1–4 incremental; Phase 5 locks **92/100**.
+  Rationale: Evidence-based; prefer honest shortfall over fake 100.
 - Decision: Do not `npm audit fix --force`.
   Rationale: Remaining fixes require Nest 11 / Vite 8 / Vitest 4 breaking majors.
 - Decision: SPA API mode opt-in via `VITE_API_URL` (demo seed otherwise).
@@ -49,18 +51,20 @@ Phase 4 Documentation, Observability & DevOps — **complete** (2026-07-20). Ale
   Rationale: Fail closed for multi-tenant safety; no cross-org parent attach.
 - Decision: Sync→realtime emits after commit only; boards collection has no WS mutation type (lists/cards only).
   Rationale: Match CRUD decoupling; avoid inventing board.* frame types.
-- Decision: Atlaskit DnD deferred past Phase 4.
-  Rationale: Non-trivial UI migration; not needed for observability/sync ROI.
+- Decision: Atlaskit DnD deferred past Phase 5.
+  Rationale: Non-trivial UI migration; documented as remaining gap (−2 CQ/Domain).
+- Decision: Phase 5 CI adds frontend Vitest + workflow_dispatch e2e stub (not full compose e2e).
+  Rationale: Close small DevOps/Testing gap without inventing a staging host.
 
 ## Next Immediate Steps
-1. Human review of Phase 4 PR/diff on `main`.
-2. Phase 5 candidates: live prod HA drill; Nest/Vite majors PR; Atlaskit DnD; Alertmanager; metrics ACL; CI e2e smoke.
-3. Optional: smoke mobile sync + WS fan-out against local API.
+1. Human review of Phase 5 report + optional canvas.
+2. Future: live HA drill; Nest/Vite majors PR; Atlaskit; Alertmanager; metrics ACL; full e2e; Mongo decision.
+3. Follow OPS.md health-check cadence (daily health, weekly Grafana, monthly HA tabletop).
 
 ## Patterns & Recurring Issues Noticed
 - Pattern: Multiple Docker stacks share this host; port/memory contention is operational risk.
-- Pattern: Rules/docs converge toward code in Phases 1–4; pragmatic-dnd still pending.
-- Recurring Issue: npm critical/high blocked on major upgrades (deferred; documented in phase4 + OPS.md).
+- Pattern: Rules/docs converge toward code in Phases 1–5; pragmatic-dnd still pending.
+- Recurring Issue: npm critical/high blocked on major upgrades (deferred; documented in phase4/5 + OPS.md).
 
 ## Session Log
 - [2026-07-20T16:05+02:00] Daily readiness sweep. FlowLogix infra Red. Memory file created.
@@ -71,3 +75,4 @@ Phase 4 Documentation, Observability & DevOps — **complete** (2026-07-20). Ale
 - [2026-07-20T20:45+02:00] Phase 2 SPA REST+JWT + needsResync refetch; 108 backend / 21 frontend tests; smoke login+move ok after seed.
 - [2026-07-20T20:55+02:00] Remotes verified at `a000402`; Phase 3 sync positionIdx + offline inserts; 116 backend / 48 mobile tests.
 - [2026-07-20T21:10+02:00] Remotes verified at `4fb971d`; Phase 4 alerts/OPS + sync→WS + delta-pull; 119 backend / 21 frontend / 48 mobile; `/health` ok; committed `a1f30c0` and pushed all remotes.
+- [2026-07-20T21:20+02:00] Phase 5: remotes confirmed at `bfc5d41`; re-validation green; final **92/100**; report + CI polish + OPS cadence.

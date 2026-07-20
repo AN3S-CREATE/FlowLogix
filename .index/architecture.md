@@ -38,6 +38,7 @@ Collaborative multi-tenant Kanban platform (NestJS API + React SPA + RN offline 
 - Phase 2 Core Hardening: **~76–80/100** (est.) — see `.index/module-summaries/phase2-core-hardening.md`.
 - Phase 3 Specialized uplift: **~84–88/100** (est.) — sync `positionIdx` + offline inserts; see `phase3-specialized-uplift.md`.
 - Phase 4 Docs/observability/DevOps: **~90–93/100** (est.) — alerts, sync→WS, delta-pull; see `phase4-docs-observability-devops.md`.
+- Phase 5 Final validation: **92/100** — see `phase5-final-readiness.md` (not 100; gaps documented).
 
 ## Frontend API mode (Phase 2)
 
