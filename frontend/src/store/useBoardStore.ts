@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import { BoardSummary, Card, Id, List, Member } from './types';
 import { seedBoard, seedCards, seedLists, seedMembers } from './seed';
 import { persistCardMove } from './persistence';
+import { reconcileRemoteMutation } from './remoteMutations';
+import { BoardConnectionStatus, BoardMutationEnvelope } from '../realtime/types';
 
 interface BoardSlice {
   board: BoardSummary;
@@ -19,6 +21,12 @@ interface BoardSlice {
     toListId: Id,
     toIndex: number,
   ) => Promise<void>;
+  /**
+   * Reconcile a live board frame broadcast by a peer. Structural frames
+   * (move/delete) apply directly; content frames the lightweight delta can't
+   * hydrate flip `needsResync` so the UI can prompt a refetch.
+   */
+  applyRemoteMutation: (envelope: BoardMutationEnvelope) => void;
 }
 
 interface MembersSlice {
@@ -31,8 +39,18 @@ interface UiSlice {
   draggingCardId: Id | null;
   /** Last move that failed to persist — surfaced as an inline banner. */
   moveError: string | null;
+  /** Live connection state, driving the header status pill. */
+  connectionStatus: BoardConnectionStatus | 'idle';
+  /**
+   * A peer made a change (a create/update, or a delta-sync gap) the client
+   * can't reconstruct from the lightweight frame — the UI prompts a refetch.
+   */
+  needsResync: boolean;
   setDraggingCardId: (id: Id | null) => void;
   clearMoveError: () => void;
+  setConnectionStatus: (status: BoardConnectionStatus | 'idle') => void;
+  markNeedsResync: () => void;
+  clearNeedsResync: () => void;
 }
 
 export type BoardStore = BoardSlice & MembersSlice & UiSlice;
@@ -50,8 +68,13 @@ export const useBoardStore = create<BoardStore>((set, get) => ({
   // --- ui / drag slice ---
   draggingCardId: null,
   moveError: null,
+  connectionStatus: 'idle',
+  needsResync: false,
   setDraggingCardId: (id) => set({ draggingCardId: id }),
   clearMoveError: () => set({ moveError: null }),
+  setConnectionStatus: (status) => set({ connectionStatus: status }),
+  markNeedsResync: () => set({ needsResync: true }),
+  clearNeedsResync: () => set({ needsResync: false }),
 
   // --- board slice ---
   board: seedBoard,
@@ -91,6 +114,17 @@ export const useBoardStore = create<BoardStore>((set, get) => ({
       return { cards: { ...state.cards, [cardId]: { ...card, checklist } } };
     }),
 
+  applyRemoteMutation: (envelope) =>
+    set((state) => {
+      const patch = reconcileRemoteMutation(
+        { lists: state.lists, cards: state.cards },
+        envelope,
+      );
+      // `needsResync` is sticky (a set never clears it); the structural fields
+      // only appear when the frame actually changed the board.
+      return patch.needsResync ? { ...patch, needsResync: true } : patch;
+    }),
+
   moveCard: async (cardId, fromListId, toListId, toIndex) => {
     // Remember only where *this* card came from, so a failed persist reverts
     // just this move — a global snapshot would clobber other concurrent moves.
@@ -108,7 +142,15 @@ export const useBoardStore = create<BoardStore>((set, get) => ({
       if (currentIndex === -1) return state;
       from.cardIds.splice(currentIndex, 1);
       to.cardIds.splice(toIndex, 0, cardId);
-      return { lists, moveError: null };
+      // Drop the card's stale server key: its new slot is defined by array order
+      // until the backend echoes a fresh fractional key. Leaving the old key
+      // could misplace a later peer `card.moved` that compares against it.
+      const moved = state.cards[cardId];
+      const cards =
+        moved && moved.positionIdx !== undefined
+          ? { ...state.cards, [cardId]: { ...moved, positionIdx: undefined } }
+          : state.cards;
+      return { lists, cards, moveError: null };
     });
 
     try {

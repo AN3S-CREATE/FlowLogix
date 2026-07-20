@@ -1,6 +1,7 @@
 import { useBoardStore } from '../../store/useBoardStore';
 import { VeralogixLogo } from '../branding/VeralogixLogo';
 import { AvatarStack } from './AvatarStack';
+import { ConnectionStatus } from './ConnectionStatus';
 import { PrimaryButton } from '../ui/PrimaryButton';
 
 /**
@@ -25,6 +26,7 @@ export function AppHeader() {
       </div>
 
       <div className="flex items-center gap-4">
+        <ConnectionStatus />
         <AvatarStack memberIds={board.memberIds} size={30} ring max={5} />
         <PrimaryButton
           onClick={() => firstListId && addCard(firstListId, 'New card')}

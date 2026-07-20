@@ -15,6 +15,15 @@ imported below so there is a single source of truth shared with Cursor.
 These rules are the target the workspace is converging on; parts are not built
 yet. Notable gaps between the rules and the current code:
 
+- **Authentication.** Built (JWT). `backend/src/auth/` has `AuthService`
+  (bcrypt credential check + token signing), `POST /auth/login` and `GET
+  /auth/me`, and a global `JwtAuthGuard` (APP_GUARD) that protects every HTTP
+  route unless `@Public()` (login + `/health*`). The guard verifies the bearer
+  token and attaches `request.user`; `ActiveOrgId` now reads the org **from the
+  verified JWT**, not the old spoofable `X-Org-Id` header. Websocket contexts
+  pass through the guard (the gateway keeps its own handshake check). OAuth2/SSO
+  (external IdP) remains future work — this is the local-credential JWT core.
+
 - **RLS session variable.** The boards policy and the runtime helper both use
   `app.current_tenant_id`, matching the rules. The name lives in one place —
   the `TENANT_SETTING` constant in
@@ -54,10 +63,24 @@ yet. Notable gaps between the rules and the current code:
   pattern-subscribes and fans frames out to the matching room, with an org
   ownership check on join and a Redis-backed replay log for reconnect
   delta-sync. The client half is `frontend/src/realtime/boardSocketManager.ts`.
-- **Frontend.** The React SPA is a minimal scaffold; the Zustand
-  optimistic-update, brand palette pieces described in the rules are largely in
-  place (the branded board UI and the socket manager exist; store wiring of live
-  frames is the next step).
+- **Frontend.** The branded React SPA and the Zustand optimistic-update store
+  are in place, and live frames are now wired into the store. `App` mounts
+  `useBoardSocket` (`frontend/src/realtime/useBoardSocket.ts`), which binds the
+  `BoardSocketManager` to the store: inbound `board:mutation` frames run through
+  the pure reducer `store/remoteMutations.ts` (`reconcileRemoteMutation`), and
+  connection state drives a header `ConnectionStatus` pill. Because the deltas
+  are lightweight (§4), the reducer splits the cases — **structural** frames
+  (`card.moved`/`card.deleted`/`list.deleted`) apply directly, ordering moved
+  cards by their server `positionIdx` key (client `Card.positionIdx` is optional
+  server-supplied metadata; the frontend never mints keys), while **content**
+  frames (`*.created`/`*.updated`, unrenderable from ids alone) flip a
+  `needsResync` flag that surfaces a "Board updated — refresh" banner. The socket
+  only activates when `VITE_WS_URL` + `VITE_ORG_ID` are set, so the board still
+  runs as a self-contained offline demo otherwise. Pure logic is vitest-tested
+  (`remoteMutations.test.ts`). Remaining frontend gaps: a REST hydration client
+  to turn `needsResync` into targeted refetches, and migrating drag-and-drop from
+  `@hello-pangea/dnd` to the `.cursorrules`-specified
+  `@atlaskit/pragmatic-drag-and-drop`.
 - **Mobile offline-first sync.** Implemented in the `mobile/` workspace
   (`mobile/src/`). `crdt/` holds the LWW-CRDT primitives — a strictly-monotonic
   high-precision clock, an LWW register, an LWW-Element-Set, and a field-level
@@ -81,7 +104,7 @@ yet. Notable gaps between the rules and the current code:
   (later clock wins; exact ties broken by greater canonical-JSON value, identical
   to the client so both converge; deletion is an LWW tombstone). `SyncService`
   runs it per record inside a tenant transaction, and `SyncController` exposes
-  `POST /sync` (tenant from the `X-Org-Id` header). The master carries per-record
+  `POST /sync` (tenant from the authenticated JWT). The master carries per-record
   CRDT metadata via the `AddSyncClocks` migration — additive `sync_clocks` (jsonb
   `<field>→epoch-µs`), `node_id`, and `sync_deleted_at` columns on
   `boards`/`lists`/`cards`, mapped on the entities (`bigintToNumber` transformer).
