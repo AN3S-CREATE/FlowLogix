@@ -115,15 +115,16 @@ export const useBoardStore = create<BoardStore>((set, get) => ({
     }),
 
   applyRemoteMutation: (envelope) =>
-    set((state) => {
-      const patch = reconcileRemoteMutation(
+    // Structural frames return a `{ lists, cards }` patch; content/unknown
+    // frames return `{ needsResync: true }`. Zustand shallow-merges, so a
+    // structural patch leaves any existing `needsResync` flag in place — it
+    // stays sticky until the UI clears it.
+    set((state) =>
+      reconcileRemoteMutation(
         { lists: state.lists, cards: state.cards },
         envelope,
-      );
-      // `needsResync` is sticky (a set never clears it); the structural fields
-      // only appear when the frame actually changed the board.
-      return patch.needsResync ? { ...patch, needsResync: true } : patch;
-    }),
+      ),
+    ),
 
   moveCard: async (cardId, fromListId, toListId, toIndex) => {
     // Remember only where *this* card came from, so a failed persist reverts
@@ -131,6 +132,10 @@ export const useBoardStore = create<BoardStore>((set, get) => ({
     const fromBefore = get().lists.find((l) => l.id === fromListId);
     const originalIndex = fromBefore ? fromBefore.cardIds.indexOf(cardId) : -1;
     if (originalIndex === -1) return;
+    // Snapshot the server key too: the optimistic set clears it, and a failed
+    // persist must restore it so the reverted card stays a valid ordering
+    // reference for a later peer `card.moved`.
+    const originalPositionIdx = get().cards[cardId]?.positionIdx;
 
     // Optimistic update — render the card in the target position immediately.
     set((state) => {
@@ -168,8 +173,19 @@ export const useBoardStore = create<BoardStore>((set, get) => ({
           to.cardIds.splice(currentIndex, 1);
           from.cardIds.splice(originalIndex, 0, cardId);
         }
+        // Restore the server key the optimistic move cleared, so the reverted
+        // card stays a valid ordering reference for a later peer `card.moved`.
+        const reverted = state.cards[cardId];
+        const cards =
+          reverted && reverted.positionIdx !== originalPositionIdx
+            ? {
+                ...state.cards,
+                [cardId]: { ...reverted, positionIdx: originalPositionIdx },
+              }
+            : state.cards;
         return {
           lists,
+          cards,
           moveError: err instanceof Error ? err.message : 'Move failed',
         };
       });
