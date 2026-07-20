@@ -1,11 +1,18 @@
 # Prometheus scrape configuration for the FlowLogix production stack.
 # Reachable inside the `backend` docker network by service name.
+#
+# Alert rules: deploy/prometheus/alerts.yml (mounted read-only alongside this
+# file in docker-compose.prod.yml). Evaluate in Prometheus UI → Alerts; optional
+# Alertmanager webhook is out of band (see deploy/OPS.md).
 
 global:
   scrape_interval: 15s
   evaluation_interval: 15s
   external_labels:
     cluster: flowlogix-prod
+
+rule_files:
+  - /etc/prometheus/alerts.yml
 
 scrape_configs:
   # NestJS API replicas. Each exposes the app's Prometheus registry at

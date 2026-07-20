@@ -45,7 +45,7 @@ export class SyncRequestDto {
   @IsIn(SYNC_COLLECTIONS)
   collection: SyncCollection;
 
-  /** The client's last checkpoint (0 = full). Reserved for delta-pull. */
+  /** The client's last checkpoint (0 = full push only; >0 enables delta-pull). */
   @IsInt()
   @Min(0)
   sinceCheckpoint: number;

@@ -71,7 +71,8 @@ yet. Notable gaps between the rules and the current code:
   Socket.io gateway, the Redis Pub/Sub service, and `BoardEventsService` — the
   service-layer capture point that publishes lightweight `{ cardId, listId,
   positionIdx }` deltas to `board:room:{boardId}` *after* the DB write commits
-  (decoupled per §4). `CardsService`/`ListsService` call it; the gateway
+  (decoupled per §4). `CardsService`/`ListsService` **and** `SyncService` call
+  it (sync emits only after the tenant transaction commits); the gateway
   pattern-subscribes and fans frames out to the matching room, with an org
   ownership check on join and a Redis-backed replay log for reconnect
   delta-sync. The client half is `frontend/src/realtime/boardSocketManager.ts`.
@@ -88,7 +89,7 @@ yet. Notable gaps between the rules and the current code:
   `VITE_API_URL` the board still runs as an offline demo. Pure logic is
   vitest-tested (`remoteMutations.test.ts`, `mapBoard.test.ts`). Remaining gap:
   migrating drag-and-drop from `@hello-pangea/dnd` to the `.cursorrules`-specified
-  `@atlaskit/pragmatic-drag-and-drop`.
+  `@atlaskit/pragmatic-drag-and-drop` (deferred to Phase 5+).
 - **Mobile offline-first sync.** Implemented in the `mobile/` workspace
   (`mobile/src/`). `crdt/` holds the LWW-CRDT primitives — a strictly-monotonic
   high-precision clock, an LWW register, an LWW-Element-Set, and a field-level
@@ -116,11 +117,17 @@ yet. Notable gaps between the rules and the current code:
   CRDT metadata via the `AddSyncClocks` migration — additive `sync_clocks` (jsonb
   `<field>→epoch-µs`), `node_id`, and `sync_deleted_at` columns on
   `boards`/`lists`/`cards`, mapped on the entities (`bigintToNumber` transformer).
-  Jest-tested (mocked DataSource). **v2 / Phase 3 scope:** merges content fields
+  Jest-tested (mocked DataSource). **v2 / Phase 3–4:** merges content fields
   plus `positionIdx` and parent refs (`listId`/`boardId`); validates Base62 keys
   via `PositionService`; accepts first-time inserts of offline-created UUID rows
-  when the parent is in-org (RLS tenant context). Older clients that omit
-  structural fields keep content-only merge behaviour.
+  when the parent is in-org (RLS tenant context); when `sinceCheckpoint > 0`,
+  delta-pulls org-scoped rows whose clocks/tombstones exceed the checkpoint;
+  list/card writes publish board realtime events after commit. Older clients
+  that omit structural fields keep content-only merge behaviour.
+- **Observability / ops (Phase 4).** Prometheus scrapes `/health/metrics`;
+  alert rules in `deploy/prometheus/alerts.yml` (mounted by
+  `docker-compose.prod.yml`). Ops runbook: `deploy/OPS.md`. Remaining npm
+  critical/high still require Nest 11 / Vite 8 majors — do not `--force` on main.
 
 When you implement any of the above, follow `.cursorrules` and update this
 status list.

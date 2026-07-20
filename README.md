@@ -68,11 +68,19 @@ hydrates the board from REST. Omit `VITE_API_URL` to keep the offline demo seed.
 Card moves PATCH `/cards/:id` with neighbor ids so the API mints fractional
 keys; `needsResync` triggers a targeted board refetch instead of a full reload.
 
+### 5. Production compose & observability (optional)
+
+See [`deploy/OPS.md`](deploy/OPS.md) for health/metrics, Prometheus alert rules
+(`deploy/prometheus/alerts.yml`), Grafana provisioning, and
+`docker-compose.prod.yml` HA notes. Local stack stays `docker compose up -d`.
+
 ## Project structure
 
 ```
 FlowLogix/
 ├── docker-compose.yml       # Postgres, MongoDB, Redis for local dev
+├── docker-compose.prod.yml  # Nginx + 3 API replicas + Prometheus/Grafana
+├── deploy/                  # Prometheus/Grafana config + OPS.md runbook
 ├── backend/                 # NestJS API
 │   ├── src/
 │   └── Dockerfile

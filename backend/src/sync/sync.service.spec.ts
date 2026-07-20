@@ -5,11 +5,13 @@ import { Card } from '../cards/card.entity';
 import { Board } from '../boards/board.entity';
 import { List } from '../lists/list.entity';
 import { PositionService } from '../common/ordering/position.service';
+import { BoardEventsService } from '../realtime/board-events.service';
 
 interface FakeManager {
   findOne: jest.Mock;
   update: jest.Mock;
   insert: jest.Mock;
+  createQueryBuilder?: jest.Mock;
 }
 
 function makeService(manager: FakeManager): {
@@ -17,6 +19,7 @@ function makeService(manager: FakeManager): {
   update: jest.Mock;
   insert: jest.Mock;
   positions: PositionService;
+  boardEvents: { emit: jest.Mock };
 } {
   const queryRunner = {
     connect: jest.fn().mockResolvedValue(undefined),
@@ -32,11 +35,28 @@ function makeService(manager: FakeManager): {
     createQueryRunner: () => queryRunner,
   } as unknown as DataSource;
   const positions = new PositionService();
+  const boardEvents = { emit: jest.fn().mockResolvedValue(undefined) };
+  if (!manager.createQueryBuilder) {
+    const chain = {
+      innerJoin: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
+      take: jest.fn().mockReturnThis(),
+      getMany: jest.fn().mockResolvedValue([]),
+    };
+    manager.createQueryBuilder = jest.fn().mockReturnValue(chain);
+  }
   return {
-    service: new SyncService(dataSource, positions),
+    service: new SyncService(
+      dataSource,
+      positions,
+      boardEvents as unknown as BoardEventsService,
+    ),
     update: manager.update,
     insert: manager.insert,
     positions,
+    boardEvents,
   };
 }
 
@@ -272,13 +292,15 @@ describe('SyncService', () => {
       }),
     );
 
-    expect(manager.findOne).toHaveBeenCalledTimes(2);
+    expect(manager.findOne).toHaveBeenCalledTimes(3);
     const lockCall = manager.findOne.mock.calls[1];
     expect(lockCall[0]).toBe(Card);
     expect(lockCall[1]).toEqual({
       where: { id: CARD_ID },
       lock: { mode: 'pessimistic_write' },
     });
+    // Board id for post-commit realtime emit (join-free List lookup).
+    expect(manager.findOne.mock.calls[2][0]).toBe(List);
   });
 
   it('skips a row deleted between the auth load and the lock re-read', async () => {
@@ -504,5 +526,135 @@ describe('SyncService', () => {
       changes: [],
     });
     expect(b.checkpoint).toBeGreaterThan(a.checkpoint);
+  });
+
+  it('emits card.updated after a committed sync write', async () => {
+    const manager: FakeManager = {
+      findOne: jest.fn().mockImplementation(async (entity: unknown) => {
+        if (entity === List) return { id: LIST_ID, boardId: BOARD_ID };
+        return cardRow();
+      }),
+      update: jest.fn().mockResolvedValue({ affected: 1 }),
+      insert: jest.fn(),
+    };
+    const { service, boardEvents } = makeService(manager);
+
+    await service.sync(
+      'org-1',
+      req({
+        id: CARD_ID,
+        fields: {
+          title: 'client',
+          description: 'server desc',
+          isComplete: false,
+          listId: LIST_ID,
+          positionIdx: 'a1',
+        },
+        clocks: {
+          title: 300,
+          description: 100,
+          isComplete: 100,
+          listId: 100,
+          positionIdx: 100,
+        },
+        nodeId: 'client-node',
+        deletedAt: null,
+      }),
+    );
+
+    expect(boardEvents.emit).toHaveBeenCalledWith('card.updated', BOARD_ID, {
+      cardId: CARD_ID,
+      listId: LIST_ID,
+      positionIdx: 'a1',
+    });
+  });
+
+  it('emits list.created after an offline list insert', async () => {
+    const manager: FakeManager = {
+      findOne: jest
+        .fn()
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({ id: BOARD_ID }),
+      update: jest.fn(),
+      insert: jest.fn().mockResolvedValue({ identifiers: [{ id: LIST_ID }] }),
+    };
+    const { service, boardEvents } = makeService(manager);
+
+    await service.sync('org-1', {
+      collection: 'lists',
+      sinceCheckpoint: 0,
+      changes: [
+        {
+          id: LIST_ID,
+          fields: {
+            title: 'Offline list',
+            boardId: BOARD_ID,
+            positionIdx: 'a1',
+          },
+          clocks: { title: 10, boardId: 10, positionIdx: 10 },
+          nodeId: 'mobile-1',
+          deletedAt: null,
+        },
+      ],
+    });
+
+    expect(boardEvents.emit).toHaveBeenCalledWith('list.created', BOARD_ID, {
+      listId: LIST_ID,
+      positionIdx: 'a1',
+    });
+  });
+
+  it('delta-pulls rows newer than sinceCheckpoint', async () => {
+    const otherId = '44444444-4444-4444-8444-444444444444';
+    const chain = {
+      innerJoin: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
+      take: jest.fn().mockReturnThis(),
+      getMany: jest.fn().mockResolvedValue([
+        {
+          id: otherId,
+          title: 'peer',
+          description: null,
+          isComplete: false,
+          listId: LIST_ID,
+          positionIdx: 'a2',
+          syncClocks: { title: 500 },
+          nodeId: 'peer-node',
+          syncDeletedAt: null,
+        },
+      ]),
+    };
+    const manager: FakeManager = {
+      findOne: jest.fn().mockResolvedValue(null),
+      update: jest.fn(),
+      insert: jest.fn(),
+      createQueryBuilder: jest.fn().mockReturnValue(chain),
+    };
+    const { service } = makeService(manager);
+
+    const res = await service.sync('org-1', {
+      collection: 'cards',
+      sinceCheckpoint: 200,
+      changes: [],
+    });
+
+    expect(manager.createQueryBuilder).toHaveBeenCalled();
+    expect(res.changes).toEqual([
+      {
+        id: otherId,
+        fields: {
+          title: 'peer',
+          description: null,
+          isComplete: false,
+          listId: LIST_ID,
+          positionIdx: 'a2',
+        },
+        clocks: { title: 500 },
+        nodeId: 'peer-node',
+        deletedAt: null,
+      },
+    ]);
   });
 });

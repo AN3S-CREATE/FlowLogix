@@ -1,0 +1,92 @@
+# FlowLogix production alert rules.
+# Evaluated by Prometheus (see rule_files in prometheus.yml).
+# Wire Alertmanager separately when a notification channel is available;
+# until then, rules surface in Prometheus UI → Alerts and can drive Grafana
+# alert panels against the same Prometheus datasource.
+
+groups:
+  - name: flowlogix-dependencies
+    rules:
+      - alert: FlowLogixDependencyDown
+        expr: flowlogix_dependency_up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: 'FlowLogix {{ $labels.dependency }} is down on {{ $labels.instance }}'
+          description: >-
+            Health probe for {{ $labels.dependency }} reported down for >1m.
+            Check GET /health on the affected API replica and docker compose logs.
+
+      - alert: FlowLogixPostgresHighLatency
+        expr: flowlogix_postgres_latency_ms > 500
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Postgres probe latency high on {{ $labels.instance }}'
+          description: >-
+            SELECT 1 probe latency is {{ $value }}ms (threshold 500ms for 5m).
+
+  - name: flowlogix-api
+    rules:
+      - alert: FlowLogixApiHighErrorRate
+        expr: |
+          sum by (instance) (
+            rate(flowlogix_http_request_duration_seconds_count{status=~"5.."}[5m])
+          )
+          /
+          clamp_min(
+            sum by (instance) (
+              rate(flowlogix_http_request_duration_seconds_count[5m])
+            ),
+            0.001
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'API 5xx rate >5% on {{ $labels.instance }}'
+          description: >-
+            More than 5% of HTTP requests are returning 5xx over 5m.
+            Inspect Nest logs and dependency health.
+
+      - alert: FlowLogixApiHighLatencyP95
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le, instance) (
+              rate(flowlogix_http_request_duration_seconds_bucket[5m])
+            )
+          ) > 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'API p95 latency >1s on {{ $labels.instance }}'
+          description: >-
+            p95 request latency is {{ $value }}s over 5m windows for 10m.
+
+  - name: flowlogix-realtime
+    rules:
+      - alert: FlowLogixWebsocketPoolSaturated
+        expr: flowlogix_websocket_pool_size > 5000
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'WebSocket pool size high on {{ $labels.instance }}'
+          description: >-
+            {{ $value }} open Socket.io connections. Scale API replicas or
+            investigate stuck clients.
+
+      - alert: FlowLogixInstanceDown
+        expr: up{job="flowlogix-api"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: 'Prometheus cannot scrape API replica {{ $labels.instance }}'
+          description: >-
+            Target {{ $labels.instance }} has been unreachable for >2m.
+            Check container health and network (docker-compose.prod.yml).

@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import {
+  Brackets,
   DataSource,
   EntityManager,
   EntityTarget,
@@ -13,13 +14,26 @@ import { List } from '../lists/list.entity';
 import { Card } from '../cards/card.entity';
 import { PositionService } from '../common/ordering/position.service';
 import { runInTenantContext } from '../common/tenant/tenant-transaction.util';
+import { BoardEventsService } from '../realtime/board-events.service';
 import {
+  BoardMutationPayload,
+  BoardMutationType,
+} from '../realtime/dto/board-mutation';
+import {
+  MAX_SYNC_CHANGES,
   SyncChangeDto,
   SyncCollection,
   SyncRequestDto,
   SyncResponseDto,
 } from './dto/sync.dto';
 import { mergeServerRecord, RecordState } from './sync-merge';
+
+/** Queued after the tenant transaction commits (DB write decoupled from WS). */
+interface PendingBoardEvent {
+  type: BoardMutationType;
+  boardId: string;
+  payload: BoardMutationPayload;
+}
 
 /** A loaded row viewed through its sync metadata + arbitrary field access. */
 type SyncRow = {
@@ -64,11 +78,14 @@ interface CollectionStrategy {
  * record where the server is newer — all inside one tenant transaction so RLS
  * is enforced.
  *
- * **Scope (v2 / Phase 3).** Merges content fields plus structural sync fields
+ * **Scope (v2 / Phase 3–4).** Merges content fields plus structural sync fields
  * (`positionIdx`, `listId` / `boardId`) under LWW, and accepts first-time
  * inserts of offline-created records when the parent is in-org and the client
  * id is a UUID. Invalid Base62 `positionIdx` values are dropped (never written);
  * older clients that omit structural fields keep content-only merge behaviour.
+ * After commit, list/card writes publish lightweight board events (parity with
+ * CRUD). When `sinceCheckpoint > 0`, also delta-pulls org-scoped rows whose
+ * sync clocks (or tombstone) exceed that checkpoint.
  */
 @Injectable()
 export class SyncService {
@@ -221,117 +238,329 @@ export class SyncService {
   constructor(
     @InjectDataSource() private readonly dataSource: DataSource,
     private readonly positions: PositionService,
+    private readonly boardEvents: BoardEventsService,
   ) {}
 
   async sync(orgId: string, req: SyncRequestDto): Promise<SyncResponseDto> {
     const strategy = this.strategies[req.collection];
+    const pendingEvents: PendingBoardEvent[] = [];
 
-    return runInTenantContext(this.dataSource, orgId, async (manager) => {
-      const changes: SyncChangeDto[] = [];
-      const acceptedIds: string[] = [];
+    const response = await runInTenantContext(
+      this.dataSource,
+      orgId,
+      async (manager) => {
+        const changes: SyncChangeDto[] = [];
+        const acceptedIds: string[] = [];
 
-      // Acquire row locks in a deterministic (id-sorted) order so two concurrent
-      // /sync requests touching the same records can't deadlock by locking them
-      // in opposite orders. Per-record merges are independent, so processing
-      // order doesn't affect the result. Use raw binary comparison, not
-      // localeCompare — the latter is locale-sensitive, so instances under
-      // different locales could order the same ids differently and reintroduce
-      // the deadlock this ordering exists to prevent.
-      const orderedChanges = [...req.changes].sort((a, b): number =>
-        a.id < b.id ? -1 : a.id > b.id ? 1 : 0,
-      );
+        // Acquire row locks in a deterministic (id-sorted) order so two concurrent
+        // /sync requests touching the same records can't deadlock by locking them
+        // in opposite orders. Per-record merges are independent, so processing
+        // order doesn't affect the result. Use raw binary comparison, not
+        // localeCompare — the latter is locale-sensitive, so instances under
+        // different locales could order the same ids differently and reintroduce
+        // the deadlock this ordering exists to prevent.
+        const orderedChanges = [...req.changes].sort((a, b): number =>
+          a.id < b.id ? -1 : a.id > b.id ? 1 : 0,
+        );
 
-      for (const change of orderedChanges) {
-        // 1) Authorize: resolve the record in-org via the board-ownership chain.
-        let authorized = await strategy.load(manager, change.id, orgId);
+        for (const change of orderedChanges) {
+          // 1) Authorize: resolve the record in-org via the board-ownership chain.
+          let authorized = await strategy.load(manager, change.id, orgId);
 
-        if (!authorized) {
-          // Unseen id: attempt an offline-created insert when the payload is
-          // complete and the parent is in-org. On unique-violation race (another
-          // sync won), fall through to a re-load + merge.
-          const inserted = await strategy.tryInsert(
-            manager,
-            orgId,
-            change,
-            this.positions,
-          );
-          if (inserted) {
-            acceptedIds.push(change.id);
-            continue;
+          if (!authorized) {
+            // Unseen id: attempt an offline-created insert when the payload is
+            // complete and the parent is in-org. On unique-violation race (another
+            // sync won), fall through to a re-load + merge.
+            const inserted = await strategy.tryInsert(
+              manager,
+              orgId,
+              change,
+              this.positions,
+            );
+            if (inserted) {
+              acceptedIds.push(change.id);
+              const created = await this.eventForInsert(
+                manager,
+                req.collection,
+                change,
+              );
+              if (created) pendingEvents.push(created);
+              continue;
+            }
+            authorized = await strategy.load(manager, change.id, orgId);
+            if (!authorized) continue; // incomplete / out-of-org → keep pending
           }
-          authorized = await strategy.load(manager, change.id, orgId);
-          if (!authorized) continue; // incomplete / out-of-org → keep pending
-        }
 
-        // 2) Lock the row FOR UPDATE and re-read its freshly-committed state, so
-        // concurrent syncs (or a CRUD write) on the same record serialize instead
-        // of racing read-modify-write and losing an update. The lock is by id
-        // alone — no relation join — so Postgres doesn't reject it on the nullable
-        // side of an outer join. Null here means it was deleted between the two
-        // reads; skip it.
-        const row = (await manager.findOne(strategy.entity, {
-          where: { id: change.id },
-          lock: { mode: 'pessimistic_write' },
-        })) as SyncRow | null;
-        if (!row) continue;
+          // 2) Lock the row FOR UPDATE and re-read its freshly-committed state, so
+          // concurrent syncs (or a CRUD write) on the same record serialize instead
+          // of racing read-modify-write and losing an update. The lock is by id
+          // alone — no relation join — so Postgres doesn't reject it on the nullable
+          // side of an outer join. Null here means it was deleted between the two
+          // reads; skip it.
+          const row = (await manager.findOne(strategy.entity, {
+            where: { id: change.id },
+            lock: { mode: 'pessimistic_write' },
+          })) as SyncRow | null;
+          if (!row) continue;
 
-        const { fields: clientFields, clocks: clientClocks } =
-          await this.sanitizeClientChange(
-            manager,
-            orgId,
-            strategy.syncFields,
-            change.fields,
-            change.clocks,
-          );
+          const { fields: clientFields, clocks: clientClocks } =
+            await this.sanitizeClientChange(
+              manager,
+              orgId,
+              strategy.syncFields,
+              change.fields,
+              change.clocks,
+            );
 
-        const server: RecordState = {
-          fields: this.readFields(row, strategy.syncFields),
-          clocks: row.syncClocks ?? {},
-          nodeId: row.nodeId,
-          deletedAt: row.syncDeletedAt,
-        };
-        const client: RecordState = {
-          fields: clientFields,
-          clocks: clientClocks,
-          nodeId: change.nodeId,
-          deletedAt: change.deletedAt,
-        };
-
-        const result = mergeServerRecord(server, client);
-
-        if (result.serverChanged) {
-          // Targeted update of only the sync columns: writing the whole entity
-          // back (save) would clobber any non-sync column (dueDate, isArchived,
-          // ...) a concurrent CRUD write changed after we loaded it.
-          const patch: Record<string, unknown> = {
-            syncClocks: result.merged.clocks,
-            nodeId: result.merged.nodeId,
-            syncDeletedAt: result.merged.deletedAt,
+          const server: RecordState = {
+            fields: this.readFields(row, strategy.syncFields),
+            clocks: row.syncClocks ?? {},
+            nodeId: row.nodeId,
+            deletedAt: row.syncDeletedAt,
           };
-          for (const field of strategy.syncFields) {
-            patch[field] = result.merged.fields[field];
+          const client: RecordState = {
+            fields: clientFields,
+            clocks: clientClocks,
+            nodeId: change.nodeId,
+            deletedAt: change.deletedAt,
+          };
+
+          const result = mergeServerRecord(server, client);
+
+          if (result.serverChanged) {
+            // Targeted update of only the sync columns: writing the whole entity
+            // back (save) would clobber any non-sync column (dueDate, isArchived,
+            // ...) a concurrent CRUD write changed after we loaded it.
+            const patch: Record<string, unknown> = {
+              syncClocks: result.merged.clocks,
+              nodeId: result.merged.nodeId,
+              syncDeletedAt: result.merged.deletedAt,
+            };
+            for (const field of strategy.syncFields) {
+              patch[field] = result.merged.fields[field];
+            }
+            await manager.update(
+              strategy.entity,
+              change.id,
+              patch as QueryDeepPartialEntity<ObjectLiteral>,
+            );
+            const updated = await this.eventForUpdate(
+              manager,
+              req.collection,
+              change.id,
+              server,
+              result.merged,
+            );
+            if (updated) pendingEvents.push(updated);
           }
-          await manager.update(
-            strategy.entity,
-            change.id,
-            patch as QueryDeepPartialEntity<ObjectLiteral>,
-          );
+
+          if (result.clientAccepted) acceptedIds.push(change.id);
+          if (result.serverAhead) {
+            changes.push({
+              id: change.id,
+              fields: result.merged.fields,
+              clocks: result.merged.clocks,
+              nodeId: result.merged.nodeId ?? '',
+              deletedAt: result.merged.deletedAt,
+            });
+          }
         }
 
-        if (result.clientAccepted) acceptedIds.push(change.id);
-        if (result.serverAhead) {
-          changes.push({
-            id: change.id,
-            fields: result.merged.fields,
-            clocks: result.merged.clocks,
-            nodeId: result.merged.nodeId ?? '',
-            deletedAt: result.merged.deletedAt,
-          });
+        // Delta-pull: rows peers/CRUD updated since the client's checkpoint that
+        // were not already covered by the push/merge loop above.
+        if (req.sinceCheckpoint > 0) {
+          const room = MAX_SYNC_CHANGES - changes.length;
+          if (room > 0) {
+            const exclude = new Set(changes.map((c) => c.id));
+            for (const id of acceptedIds) exclude.add(id);
+            const pulled = await this.pullSinceCheckpoint(
+              manager,
+              req.collection,
+              orgId,
+              req.sinceCheckpoint,
+              exclude,
+              room,
+            );
+            changes.push(...pulled);
+          }
         }
+
+        return { changes, checkpoint: this.nowMicros(), acceptedIds };
+      },
+    );
+
+    // Publish only after commit — never couple Redis latency to the DB write.
+    for (const event of pendingEvents) {
+      void this.boardEvents.emit(event.type, event.boardId, event.payload);
+    }
+
+    return response;
+  }
+
+  /**
+   * Org-scoped rows whose tombstone or any field clock is newer than
+   * `sinceCheckpoint`. Bounded by `limit`; skips ids already in the response.
+   */
+  private async pullSinceCheckpoint(
+    manager: EntityManager,
+    collection: SyncCollection,
+    orgId: string,
+    sinceCheckpoint: number,
+    excludeIds: Set<string>,
+    limit: number,
+  ): Promise<SyncChangeDto[]> {
+    const strategy = this.strategies[collection];
+    const clockPredicate = (alias: string): Brackets =>
+      new Brackets((qb) => {
+        qb.where(
+          `${alias}.sync_deleted_at IS NOT NULL AND ${alias}.sync_deleted_at > :cp`,
+          { cp: sinceCheckpoint },
+        ).orWhere(
+          `EXISTS (
+            SELECT 1 FROM jsonb_each(${alias}.sync_clocks) AS e
+            WHERE (e.value #>> '{}')::bigint > :cp
+          )`,
+          { cp: sinceCheckpoint },
+        );
+      });
+
+    let rows: SyncRow[] = [];
+    if (collection === 'boards') {
+      rows = (await manager
+        .createQueryBuilder(Board, 'b')
+        .where('b.org_id = :orgId', { orgId })
+        .andWhere(clockPredicate('b'))
+        .orderBy('b.id', 'ASC')
+        .take(limit + excludeIds.size)
+        .getMany()) as unknown as SyncRow[];
+    } else if (collection === 'lists') {
+      rows = (await manager
+        .createQueryBuilder(List, 'l')
+        .innerJoin('l.board', 'board')
+        .where('board.org_id = :orgId', { orgId })
+        .andWhere(clockPredicate('l'))
+        .orderBy('l.id', 'ASC')
+        .take(limit + excludeIds.size)
+        .getMany()) as unknown as SyncRow[];
+    } else {
+      rows = (await manager
+        .createQueryBuilder(Card, 'c')
+        .innerJoin('c.list', 'list')
+        .innerJoin('list.board', 'board')
+        .where('board.org_id = :orgId', { orgId })
+        .andWhere(clockPredicate('c'))
+        .orderBy('c.id', 'ASC')
+        .take(limit + excludeIds.size)
+        .getMany()) as unknown as SyncRow[];
+    }
+
+    const out: SyncChangeDto[] = [];
+    for (const row of rows) {
+      const id = String(row['id']);
+      if (excludeIds.has(id)) continue;
+      out.push({
+        id,
+        fields: this.readFields(row, strategy.syncFields),
+        clocks: row.syncClocks ?? {},
+        nodeId: row.nodeId ?? '',
+        deletedAt: row.syncDeletedAt,
+      });
+      if (out.length >= limit) break;
+    }
+    return out;
+  }
+
+  private async eventForInsert(
+    manager: EntityManager,
+    collection: SyncCollection,
+    change: SyncChangeDto,
+  ): Promise<PendingBoardEvent | null> {
+    if (collection === 'boards') return null;
+    if (collection === 'lists') {
+      const boardId = asUuid(change.fields.boardId);
+      if (boardId === null) return null;
+      const positionIdx =
+        typeof change.fields.positionIdx === 'string'
+          ? change.fields.positionIdx
+          : undefined;
+      return {
+        type: 'list.created',
+        boardId,
+        payload: { listId: change.id, positionIdx },
+      };
+    }
+    const listId = asUuid(change.fields.listId);
+    if (listId === null) return null;
+    const boardId = await boardIdForList(manager, listId);
+    if (boardId === null) return null;
+    const positionIdx =
+      typeof change.fields.positionIdx === 'string'
+        ? change.fields.positionIdx
+        : undefined;
+    return {
+      type: 'card.created',
+      boardId,
+      payload: { cardId: change.id, listId, positionIdx },
+    };
+  }
+
+  private async eventForUpdate(
+    manager: EntityManager,
+    collection: SyncCollection,
+    id: string,
+    before: RecordState,
+    after: RecordState,
+  ): Promise<PendingBoardEvent | null> {
+    if (collection === 'boards') return null;
+
+    const deletedNow =
+      after.deletedAt !== null && after.deletedAt !== undefined;
+    const wasDeleted =
+      before.deletedAt !== null && before.deletedAt !== undefined;
+
+    if (collection === 'lists') {
+      const boardId = asUuid(after.fields.boardId ?? before.fields.boardId);
+      if (boardId === null) return null;
+      if (deletedNow && !wasDeleted) {
+        return { type: 'list.deleted', boardId, payload: { listId: id } };
       }
+      const positionIdx =
+        typeof after.fields.positionIdx === 'string'
+          ? after.fields.positionIdx
+          : undefined;
+      return {
+        type: 'list.updated',
+        boardId,
+        payload: { listId: id, positionIdx },
+      };
+    }
 
-      return { changes, checkpoint: this.nowMicros(), acceptedIds };
-    });
+    const listId = asUuid(after.fields.listId ?? before.fields.listId);
+    if (listId === null) return null;
+    const boardId = await boardIdForList(manager, listId);
+    if (boardId === null) return null;
+    if (deletedNow && !wasDeleted) {
+      return {
+        type: 'card.deleted',
+        boardId,
+        payload: { cardId: id, listId },
+      };
+    }
+    const beforeList = asUuid(before.fields.listId);
+    const afterPos =
+      typeof after.fields.positionIdx === 'string'
+        ? after.fields.positionIdx
+        : undefined;
+    const beforePos =
+      typeof before.fields.positionIdx === 'string'
+        ? before.fields.positionIdx
+        : undefined;
+    const moved = beforeList !== listId || beforePos !== afterPos;
+    return {
+      type: moved ? 'card.moved' : 'card.updated',
+      boardId,
+      payload: { cardId: id, listId, positionIdx: afterPos },
+    };
   }
 
   /**
@@ -470,6 +699,17 @@ async function listInOrg(
     relations: { board: true },
   });
   return row !== null;
+}
+
+async function boardIdForList(
+  manager: EntityManager,
+  listId: string,
+): Promise<string | null> {
+  const row = await manager.findOne(List, {
+    where: { id: listId },
+    select: { id: true, boardId: true },
+  });
+  return row?.boardId ?? null;
 }
 
 /**

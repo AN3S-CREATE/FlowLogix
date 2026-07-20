@@ -20,3 +20,5 @@ Living, queryable project context for humans and coding agents. Relative paths f
 | `module-summaries/phase0-readiness.md` | Phase 0 production readiness audit |
 | `module-summaries/phase1-quick-wins.md` | Phase 1 Quick Wins remediation report |
 | `module-summaries/phase2-core-hardening.md` | Phase 2 SPA REST+JWT + needsResync refetch |
+| `module-summaries/phase3-specialized-uplift.md` | Phase 3 sync positionIdx + offline inserts |
+| `module-summaries/phase4-docs-observability-devops.md` | Phase 4 alerts, OPS, sync→WS, delta-pull |

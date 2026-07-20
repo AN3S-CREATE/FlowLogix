@@ -11,7 +11,7 @@ Collaborative multi-tenant Kanban platform (NestJS API + React SPA + RN offline 
 | Mobile | `mobile/` | Offline-first CRDT sync + attachment queue (WatermelonDB ports) |
 | Local data | `docker-compose.yml` | Postgres :5432, MongoDB :27018 (host remap), Redis :6379 |
 | Prod stack | `docker-compose.prod.yml` | Nginx TLS, 3 API replicas, Redis master/replica, Prometheus, Grafana |
-| Observability | `deploy/` | Prometheus scrape config + Grafana dashboard provisioning |
+| Observability | `deploy/` | Prometheus scrape + alert rules + Grafana dashboard provisioning; `OPS.md` runbook |
 
 ## Data / isolation
 
@@ -37,6 +37,7 @@ Collaborative multi-tenant Kanban platform (NestJS API + React SPA + RN offline 
 - Phase 1 Quick Wins: **~68–70/100** (est.) — see `.index/module-summaries/phase1-quick-wins.md`.
 - Phase 2 Core Hardening: **~76–80/100** (est.) — see `.index/module-summaries/phase2-core-hardening.md`.
 - Phase 3 Specialized uplift: **~84–88/100** (est.) — sync `positionIdx` + offline inserts; see `phase3-specialized-uplift.md`.
+- Phase 4 Docs/observability/DevOps: **~90–93/100** (est.) — alerts, sync→WS, delta-pull; see `phase4-docs-observability-devops.md`.
 
 ## Frontend API mode (Phase 2)
 
@@ -44,7 +45,9 @@ Collaborative multi-tenant Kanban platform (NestJS API + React SPA + RN offline 
 - WS org from JWT session; URL from `VITE_WS_URL` or API origin.
 - Card moves send neighbor ids; Nest mints Base62 `position_idx`.
 
-## Sync v2 (Phase 3)
+## Sync v2 (Phase 3–4)
 
 - `POST /sync` LWW includes `positionIdx` + `listId`/`boardId` (validated, tenant-scoped).
 - Offline-created UUID inserts when parent is in-org; older content-only clients unchanged.
+- `sinceCheckpoint > 0` delta-pulls org-scoped rows with newer clocks/tombstones.
+- List/card sync writes emit board realtime events after commit (CRUD parity).

@@ -15,3 +15,4 @@
 | 2026-07-20 | Phase 2 = SPA JWT/REST hydrate + needsResync refetch; server mints move keys from neighbors | P1+P5; frontend never invents `positionIdx` |
 | 2026-07-20 | SPA API mode opt-in via `VITE_API_URL` (demo seed otherwise) | Preserve offline demo without backend |
 | 2026-07-20 | Phase 3 = sync `positionIdx`/parents + offline inserts; drop invalid keys with clocks | P7; fail-closed multi-tenant; v1 content-only clients compatible |
+| 2026-07-20 | Phase 4 = Prometheus alerts + OPS.md; sync→WS after commit; sinceCheckpoint delta-pull; defer Atlaskit + npm majors | High-ROI without live prod creds; keep main shippable |
