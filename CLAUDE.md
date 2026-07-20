@@ -128,13 +128,17 @@ yet. Notable gaps between the rules and the current code:
   Bearer `METRICS_SECRET`; Alertmanager wired from Prometheus (placeholder
   webhook); alert rules in `deploy/prometheus/alerts.yml`. Ops: `deploy/OPS.md`,
   HA tabletop `deploy/HA-TABLETOP.md`, load smoke `deploy/load/`. Vite 8 / Vitest 4
-  shipped; Nest 11 still deferred (workspace lockfile) — do not `--force` Nest on main.
+  shipped; **Nest 11** shipped in Phase 5c (root `overrides` + clean lockfile).
 - **Phase 5 final readiness (2026-07-20).** Locked **92/100** — see
   `phase5-final-readiness.md`.
 - **Phase 5b gap closure (2026-07-20).** Closed metrics ACL, Alertmanager, optional
   Mongo health, Atlaskit DnD, CI compose health e2e, load suite, HA tabletop,
   Vite 8/Vitest 4. Suites: **128** Jest / **23** frontend Vitest / **48** mobile.
-  Score **97/100** — see `phase5b-gap-closure.md`. Not 100: Nest 11 + live prod HA.
+  Score **97/100** — see `phase5b-gap-closure.md`.
+- **Phase 5c Nest 11 (2026-07-20).** Backend on Nest **11.1.28** (+ config 4 /
+  jwt 11 / typeorm 11 / schedule 6 / throttler 6). Express v5 query parser set to
+  `extended`; JWT `expiresIn` typed as `ms.StringValue`. Score **99/100** — see
+  `phase5c-nest11.md`. Not 100: live prod HA drill only.
 
 When you implement any of the above, follow `.cursorrules` and update this
 status list.

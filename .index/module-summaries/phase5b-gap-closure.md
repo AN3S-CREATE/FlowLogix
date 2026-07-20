@@ -10,7 +10,9 @@
 
 Closed the high-ROI Phase 5 gaps that could be done without live prod credentials: metrics ACL, Alertmanager stub, optional Mongo health gate, Atlaskit DnD, real CI compose health smoke, load/SLO scripts, HA tabletop + compose config validation, and Vite 8 / Vitest 4.
 
-**Not 100:** Nest 11 blocked by workspace duplicate-module / lockfile issues (reverted to Nest 10 — shippable); live production HA drill still impossible without a host/credentials.
+**Not 100 (at Phase 5b close):** Nest 11 blocked by workspace duplicate-module / lockfile issues (reverted to Nest 10 — shippable); live production HA drill still impossible without a host/credentials.
+
+> **Follow-up (Phase 5c):** Nest 11 completed successfully — see `phase5c-nest11.md` (score **99/100**; live HA still open).
 
 ---
 

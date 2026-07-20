@@ -20,3 +20,5 @@
 | 2026-07-20 | Phase 5b: metrics ACL, Alertmanager, optional Mongo, Atlaskit DnD, Vite8/Vitest4, load suite, HA tabletop, real CI e2e → **97/100** | Nest 11 deferred (lockfile); live HA still needs host |
 | 2026-07-20 | Keep Mongo in stack; `HEALTH_REQUIRE_MONGO=false` optional gate | Probe-only today; least-breaking vs retire |
 | 2026-07-20 | Protect `/health/metrics` with `METRICS_SECRET` (prod fail-closed) | `/health` stays public for LB |
+| 2026-07-20 | Phase 5c: Nest 11 via `chore/nest-11` then merge to main → **99/100** | Exact pins + root overrides; clean lockfile avoids nested Nest/rxjs |
+| 2026-07-20 | Express v5: set `query parser` to `extended` in `main.ts` | Preserve nested query parsing vs Express v5 default `simple` |

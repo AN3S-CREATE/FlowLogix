@@ -28,7 +28,11 @@ export class ListsService {
     // `lists` has RLS: the insert (and the last-key lookup) must run with the
     // tenant set on the same transaction, or the policy rejects/hides the rows.
     const list = await runInTenantContext(this.dataSource, orgId, async (m) => {
-      const positionIdx = await this.resolvePosition(m, boardId, dto.positionIdx);
+      const positionIdx = await this.resolvePosition(
+        m,
+        boardId,
+        dto.positionIdx,
+      );
       return m.save(List, m.create(List, { ...dto, boardId, positionIdx }));
     });
     // Fire-and-forget: best-effort broadcast, don't block the response on Redis.
@@ -59,7 +63,8 @@ export class ListsService {
 
   async update(id: string, orgId: string, dto: UpdateListDto): Promise<List> {
     const list = await this.tenantAccess.assertListInOrg(id, orgId);
-    if (dto.positionIdx !== undefined) this.positions.assertValid(dto.positionIdx);
+    if (dto.positionIdx !== undefined)
+      this.positions.assertValid(dto.positionIdx);
     Object.assign(list, dto);
     const saved = await runInTenantContext(this.dataSource, orgId, (m) =>
       m.save(List, list),
@@ -95,7 +100,9 @@ export class ListsService {
   async remove(id: string, orgId: string): Promise<void> {
     const list = await this.tenantAccess.assertListInOrg(id, orgId);
     const boardId = list.boardId;
-    await runInTenantContext(this.dataSource, orgId, (m) => m.remove(List, list));
+    await runInTenantContext(this.dataSource, orgId, (m) =>
+      m.remove(List, list),
+    );
     // Fire-and-forget, matching create/update and cards: emit is best-effort
     // (errors swallowed internally), so don't add Redis latency to the delete.
     void this.boardEvents.emit('list.deleted', boardId, { listId: id });

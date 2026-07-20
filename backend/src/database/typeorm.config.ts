@@ -19,7 +19,9 @@ export const entities = [
   Comment,
 ];
 
-export function buildDataSourceOptions(env: NodeJS.ProcessEnv): PostgresConnectionOptions {
+export function buildDataSourceOptions(
+  env: NodeJS.ProcessEnv,
+): PostgresConnectionOptions {
   return {
     type: 'postgres',
     host: env.POSTGRES_HOST ?? 'localhost',
@@ -37,7 +39,9 @@ export function buildDataSourceOptions(env: NodeJS.ProcessEnv): PostgresConnecti
 // POSTGRES_USER (the migration/owner role) so that Row-Level Security
 // policies are actually enforced — Postgres bypasses RLS for superusers
 // and for a table's own owner regardless of FORCE ROW LEVEL SECURITY.
-export function buildAppDataSourceOptions(env: NodeJS.ProcessEnv): PostgresConnectionOptions {
+export function buildAppDataSourceOptions(
+  env: NodeJS.ProcessEnv,
+): PostgresConnectionOptions {
   return {
     ...buildDataSourceOptions(env),
     username: env.APP_DB_USER ?? 'logixflow_app',

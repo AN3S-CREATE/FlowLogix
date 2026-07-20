@@ -40,7 +40,8 @@ Collaborative multi-tenant Kanban platform (NestJS API + React SPA + RN offline 
 - Phase 3 Specialized uplift: **~84–88/100** (est.) — sync `positionIdx` + offline inserts; see `phase3-specialized-uplift.md`.
 - Phase 4 Docs/observability/DevOps: **~90–93/100** (est.) — alerts, sync→WS, delta-pull; see `phase4-docs-observability-devops.md`.
 - Phase 5 Final validation: **92/100** — see `phase5-final-readiness.md`.
-- Phase 5b Gap closure: **97/100** — see `phase5b-gap-closure.md` (not 100; Nest 11 + live HA remain).
+- Phase 5b Gap closure: **97/100** — see `phase5b-gap-closure.md`.
+- Phase 5c Nest 11: **99/100** — see `phase5c-nest11.md` (not 100; live HA remain).
 
 ## Frontend API mode (Phase 2)
 

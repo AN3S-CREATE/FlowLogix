@@ -1,6 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { winstonLogger } from './common/logging/winston.config';
@@ -10,7 +11,12 @@ import { MetricsService } from './health/metrics.service';
 async function bootstrap() {
   // Structured JSON logs to stdout (see winston.config.ts); passed at creation
   // so bootstrap-time logs flow through the same pipeline.
-  const app = await NestFactory.create(AppModule, { logger: winstonLogger });
+  // Nest 11 defaults to Express v5; keep extended query parsing for nested
+  // query shapes (Express v5's default "simple" parser drops them).
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    logger: winstonLogger,
+  });
+  app.set('query parser', 'extended');
 
   // Baseline HTTP security headers (CSP left unset so the API does not fight
   // the SPA's own CSP when they share an origin behind the prod nginx edge).

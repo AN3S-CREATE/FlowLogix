@@ -53,24 +53,32 @@ describe('CardsService.update', () => {
 
   it('mints a fractional key between before/after neighbors and emits card.moved', async () => {
     const card = makeCard({ id: 'c-move', listId: 'list-a', positionIdx: 'V' });
-    const before = makeCard({ id: 'c-before', listId: 'list-b', positionIdx: 'a' });
-    const after = makeCard({ id: 'c-after', listId: 'list-b', positionIdx: 'c' });
+    const before = makeCard({
+      id: 'c-before',
+      listId: 'list-b',
+      positionIdx: 'a',
+    });
+    const after = makeCard({
+      id: 'c-after',
+      listId: 'list-b',
+      positionIdx: 'c',
+    });
 
     const manager = {
-      findOne: jest.fn(async (_entity: unknown, opts: { where: { id: string } }) => {
-        const id = opts.where.id;
-        if (id === before.id) return before;
-        if (id === after.id) return after;
-        return null;
-      }),
+      findOne: jest.fn(
+        async (_entity: unknown, opts: { where: { id: string } }) => {
+          const id = opts.where.id;
+          if (id === before.id) return before;
+          if (id === after.id) return after;
+          return null;
+        },
+      ),
       save: jest.fn(async (_entity: unknown, row: Card) => row),
     } as unknown as EntityManager;
 
     const tenantAccess = {
       assertCardInOrg: jest.fn().mockResolvedValue({ ...card }),
-      assertListInOrg: jest
-        .fn()
-        .mockResolvedValue({ id: 'list-b', boardId }),
+      assertListInOrg: jest.fn().mockResolvedValue({ id: 'list-b', boardId }),
     };
     const boardEvents = { emit: jest.fn() };
 
@@ -112,9 +120,7 @@ describe('CardsService.update', () => {
       mockDataSource(manager),
       {
         assertCardInOrg: jest.fn().mockResolvedValue({ ...card }),
-        assertListInOrg: jest
-          .fn()
-          .mockResolvedValue({ id: 'list-b', boardId }),
+        assertListInOrg: jest.fn().mockResolvedValue({ id: 'list-b', boardId }),
       } as never,
       { emit: jest.fn() } as never,
       positions,

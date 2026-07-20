@@ -34,6 +34,7 @@
 | `.index/module-summaries/phase4-docs-observability-devops.md` | Phase 4 alerts/docs/sync WS/delta-pull (~90–93/100 est.) | Active |
 | `.index/module-summaries/phase5-final-readiness.md` | Phase 5 final validation + scorecard (**92/100**) | Active |
 | `.index/module-summaries/phase5b-gap-closure.md` | Phase 5b gap closure + scorecard (**97/100**) | Active |
+| `.index/module-summaries/phase5c-nest11.md` | Phase 5c NestJS 11 upgrade + scorecard (**99/100**) | Active |
 | `backend/src/common/filters/` | Global HTTP exception filter + Jest specs | Active |
 | `backend/src/**/*.spec.ts` | Jest unit tests (20 files / 128 tests) | Active |
 | `frontend/src/api/` | REST client, session, board hydrate/map | Active |

@@ -173,7 +173,13 @@ export class SyncService {
     },
     cards: {
       entity: Card,
-      syncFields: ['title', 'description', 'isComplete', 'listId', 'positionIdx'],
+      syncFields: [
+        'title',
+        'description',
+        'isComplete',
+        'listId',
+        'positionIdx',
+      ],
       load: (manager, id, orgId) =>
         manager.findOne(Card, {
           where: { id, list: { board: { orgId } } },

@@ -54,7 +54,11 @@ describe('HttpExceptionFilter', () => {
   it('preserves ValidationPipe-style object payloads', () => {
     filter.catch(
       new HttpException(
-        { statusCode: 400, message: ['email must be an email'], error: 'Bad Request' },
+        {
+          statusCode: 400,
+          message: ['email must be an email'],
+          error: 'Bad Request',
+        },
         HttpStatus.BAD_REQUEST,
       ),
       mockHost(response, { method: 'POST', url: '/auth/login' }),
@@ -72,7 +76,10 @@ describe('HttpExceptionFilter', () => {
   });
 
   it('masks unexpected errors as a generic 500', () => {
-    filter.catch(new Error('relation "secret" does not exist'), mockHost(response));
+    filter.catch(
+      new Error('relation "secret" does not exist'),
+      mockHost(response),
+    );
 
     expect(response.status).toHaveBeenCalledWith(
       HttpStatus.INTERNAL_SERVER_ERROR,
