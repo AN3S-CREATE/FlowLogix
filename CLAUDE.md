@@ -30,7 +30,13 @@ yet. Notable gaps between the rules and the current code:
   pass through the guard (the gateway keeps its own handshake check). OAuth2/SSO
   (external IdP) remains future work — this is the local-credential JWT core.
 
+- **HTTP hardening.** Global `HttpExceptionFilter` (`APP_FILTER`) masks unexpected
+  500s and shapes `HttpException` responses. `helmet` sets baseline security
+  headers in `main.ts`. `@nestjs/throttler` rate-limits at 100 req/min per IP
+  globally, with login tightened to 10/min and `/health*` `@SkipThrottle()`'d.
+
 - **RLS session variable.** The boards policy and the runtime helper both use
+
   `app.current_tenant_id`, matching the rules. The name lives in one place —
   the `TENANT_SETTING` constant in
   `backend/src/common/tenant/tenant-transaction.util.ts` — and the SQL policy

@@ -13,6 +13,9 @@ Living, queryable project context for humans and coding agents. Relative paths f
 | `dead-code.md` | Unused/legacy code log |
 | `context-refresh-log.md` | Index refresh history |
 
-## Maintenance
+## Optional
 
-Update inventory after create/edit/delete. Refresh architecture and decisions when they change. Prefer concise tables.
+| Path | Purpose |
+|------|---------|
+| `module-summaries/phase0-readiness.md` | Phase 0 production readiness audit |
+| `module-summaries/phase1-quick-wins.md` | Phase 1 Quick Wins remediation report |

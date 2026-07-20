@@ -28,7 +28,7 @@ This starts:
 | Service    | Purpose                     | Port  |
 |------------|------------------------------|-------|
 | PostgreSQL | Primary relational store     | 5432  |
-| MongoDB    | Primary document store       | 27017 |
+| MongoDB    | Health probe only (no domain collections yet) | 27018 |
 | Redis      | Pub/sub & caching layer      | 6379  |
 
 ### 2. Install dependencies
@@ -47,10 +47,11 @@ npm run migration:run --workspace backend
 npm run dev:backend
 ```
 
-The API starts on `http://localhost:3000`. Every request to a tenant-scoped
-endpoint (organizations, users, boards, and everything nested under a board)
-must include an `X-Org-Id: <uuid>` header identifying the active
-organization — see [`backend/README.md`](backend/README.md#data-model--tenant-isolation)
+The API starts on `http://localhost:3000`. Authenticate with
+`POST /auth/login`, then send `Authorization: Bearer <token>` on every
+request. The active tenant `orgId` comes from the verified JWT
+(`ActiveOrgId`) — never from a client-supplied header. See
+[`backend/README.md`](backend/README.md#data-model--tenant-isolation)
 for how isolation is enforced.
 
 ### 4. Run the frontend

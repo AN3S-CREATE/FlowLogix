@@ -58,6 +58,15 @@ jobs:
         working-directory: frontend
         run: npm run build
 
+      # --- Mobile (offline sync module; vitest unit suite) ---
+      - name: Install mobile deps
+        working-directory: mobile
+        run: npm install
+
+      - name: Test mobile (Vitest)
+        working-directory: mobile
+        run: npm test -- --ci
+
   # ---------------------------------------------------------------------------
   # 2) Build the production images and push them to GHCR. Only runs on a real
   #    merge to main (not on manual re-verify), and only after `verify` is green.

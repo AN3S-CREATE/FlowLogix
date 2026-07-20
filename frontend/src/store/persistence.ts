@@ -1,8 +1,9 @@
 /**
  * Stand-in for the real card-move mutation API. The Kanban store applies moves
  * optimistically (instant UI) and then awaits this; a rejection triggers a
- * rollback in the store. Swap this for a `fetch` to `PATCH /cards/:id` (with the
- * `X-Org-Id` header) once the board is wired to the backend.
+ * rollback in the store. Swap this for a `fetch` to `PATCH /cards/:id` with
+ * `Authorization: Bearer <jwt>` once the board is wired to the backend
+ * (tenant comes from the JWT, not a client header).
  */
 export interface PersistMovePayload {
   cardId: string;

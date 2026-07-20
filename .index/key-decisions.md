@@ -8,3 +8,7 @@
 | 2026-07-20 | Remove crash-loop Geologix-AI + exited unused containers; keep chat/whatsapp stacks | User-requested cleanup; no volume deletes |
 | (repo) | Public `/health` and `/health/metrics` | Load balancers / Prometheus scrape without JWT |
 | (repo) | Redis master/replica + 3 API replicas in prod compose | Failover / horizontal scale design |
+| 2026-07-20 | Phase 0 readiness baseline scored 60/100; no Phase 1+ until user sign-off | Mandate: discovery-only; remediations gated on scope/weights confirmation |
+| 2026-07-20 | Leave local compose running after bootstrap; stop Nest after `/health` smoke | Datastores needed for next work; Nest freed host RAM |
+| 2026-07-20 | Phase 1 = docs + HTTP filter/helmet/throttle + CI mobile; defer SPA REST & audit majors | User "Apply recommended" → Quick Wins; `--force` majors too risky |
+| 2026-07-20 | Do not commit Phase 1 until user asks | Explicit no-commit constraint |

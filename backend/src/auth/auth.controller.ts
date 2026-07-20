@@ -1,4 +1,5 @@
 import { Body, Controller, Get, HttpCode, Post } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { AuthService, LoginResult, SafeUser } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { Public } from './public.decorator';
@@ -12,6 +13,9 @@ export class AuthController {
   /** Exchange email + password for a bearer token. */
   @Public()
   @HttpCode(200)
+  // Tighter than the global 100/min — slows credential stuffing without
+  // blocking a normal user who mistypes a few times.
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post('login')
   login(@Body() dto: LoginDto): Promise<LoginResult> {
     return this.authService.login(dto.email, dto.password);

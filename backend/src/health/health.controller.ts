@@ -4,6 +4,7 @@ import {
   Res,
   ServiceUnavailableException,
 } from '@nestjs/common';
+import { SkipThrottle } from '@nestjs/throttler';
 import { Response } from 'express';
 import { HealthService } from './health.service';
 import { MetricsService } from './metrics.service';
@@ -16,8 +17,10 @@ import { Public } from '../auth/public.decorator';
  *   - `GET /health/metrics`  Prometheus exposition for scraping
  *
  * Public: load balancers and Prometheus scrape these without a token.
+ * Throttle skipped so orchestrator probes / Prometheus scrapes are not rate-limited.
  */
 @Public()
+@SkipThrottle()
 @Controller('health')
 export class HealthController {
   constructor(

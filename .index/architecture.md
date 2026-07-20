@@ -7,19 +7,31 @@ Collaborative multi-tenant Kanban platform (NestJS API + React SPA + RN offline 
 | Layer | Path | Role |
 |-------|------|------|
 | API | `backend/` | NestJS: boards/lists/cards/comments, JWT auth, RLS tenant context, `/sync`, Socket.io realtime |
-| Web | `frontend/` | React + Vite + Tailwind + Zustand |
+| Web | `frontend/` | React + Vite + Tailwind + Zustand (demo store; optional WS; REST hydration gap) |
 | Mobile | `mobile/` | Offline-first CRDT sync + attachment queue (WatermelonDB ports) |
-| Local data | `docker-compose.yml` | Postgres, MongoDB, Redis |
+| Local data | `docker-compose.yml` | Postgres :5432, MongoDB :27018 (host remap), Redis :6379 |
 | Prod stack | `docker-compose.prod.yml` | Nginx TLS, 3 API replicas, Redis master/replica, Prometheus, Grafana |
 | Observability | `deploy/` | Prometheus scrape config + Grafana dashboard provisioning |
 
 ## Data / isolation
 
-- Tenant via `org_id` / `X-Org-Id`; Postgres RLS on boards → lists → cards → comments (chained membership).
+- Tenant via JWT `orgId` (`ActiveOrgId` decorator) — **not** client `X-Org-Id`.
+- Postgres RLS on boards → lists → cards → comments (chained membership); app connects as `logixflow_app`.
 - Ordering: Base62 fractional `position_idx` via `FractionalIndexer` / `PositionService`.
 - Realtime: DB write commits → Redis Pub/Sub → `board:room:{boardId}` → Socket.io.
+- Mongo: used by health probe only today (no domain collections found).
 
 ## Health
 
 - `GET /health` — Postgres + Redis + Mongo probes; 503 if degraded.
-- `GET /health/metrics` — Prometheus exposition.
+- `GET /health/metrics` — Prometheus exposition (`@Public()`, `@SkipThrottle()`).
+
+## HTTP hardening (Phase 1)
+
+- Global `HttpExceptionFilter` (`APP_FILTER`); `helmet` headers in `main.ts`.
+- `@nestjs/throttler`: 100 req/min default; login 10/min; health skipped.
+
+## Readiness
+
+- Phase 0 baseline: **60/100** — see `.index/module-summaries/phase0-readiness.md`.
+- Phase 1 Quick Wins: **~68–70/100** (est.) — see `.index/module-summaries/phase1-quick-wins.md`.

@@ -23,3 +23,9 @@
 | `.github/workflows/deploy.yml` | Deploy workflow | Active |
 | `REPO_ANALYSIS_MEMORY.md` | Cross-session agent memory | Active |
 | `.index/` | Agent context index | Active |
+| `.index/module-summaries/phase0-readiness.md` | Phase 0 readiness audit deliverable (60/100) | Active |
+| `.index/module-summaries/phase1-quick-wins.md` | Phase 1 Quick Wins deliverable (~68–70/100 est.) | Active |
+| `backend/src/common/filters/` | Global HTTP exception filter + Jest specs | Active |
+| `backend/src/**/*.spec.ts` | Jest unit tests (17 files / 106 tests) | Active |
+| `frontend/src/**/*.test.ts` | Vitest store/mutation tests (2) | Active |
+| `mobile/src/**/*.test.ts` | Vitest CRDT/sync/upload tests (5) | Active |
