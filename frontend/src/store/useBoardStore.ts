@@ -9,6 +9,13 @@ interface BoardSlice {
   board: BoardSummary;
   lists: List[];
   cards: Record<Id, Card>;
+  /**
+   * Per-card monotonic move token. Each optimistic move — and each peer
+   * `card.moved`/`card.deleted` — bumps it; a failed move only rolls back when
+   * its token is still the latest, so concurrent moves of the same card (in the
+   * same list or across lists) never clobber one another.
+   */
+  moveVersions: Record<Id, number>;
   addCard: (listId: Id, title: string) => void;
   toggleChecklistItem: (cardId: Id, itemId: Id) => void;
   /**
@@ -80,6 +87,7 @@ export const useBoardStore = create<BoardStore>((set, get) => ({
   board: seedBoard,
   lists: seedLists,
   cards: seedCards,
+  moveVersions: {},
 
   addCard: (listId, title) =>
     set((state) => {
@@ -115,16 +123,32 @@ export const useBoardStore = create<BoardStore>((set, get) => ({
     }),
 
   applyRemoteMutation: (envelope) =>
-    // Structural frames return a `{ lists, cards }` patch; content/unknown
-    // frames return `{ needsResync: true }`. Zustand shallow-merges, so a
-    // structural patch leaves any existing `needsResync` flag in place — it
-    // stays sticky until the UI clears it.
-    set((state) =>
-      reconcileRemoteMutation(
+    set((state) => {
+      // Structural frames return a `{ lists, cards }` patch; content/unknown
+      // frames return `{ needsResync: true }`. Zustand shallow-merges, so a
+      // structural patch leaves any existing `needsResync` flag in place — it
+      // stays sticky until the UI clears it.
+      const patch = reconcileRemoteMutation(
         { lists: state.lists, cards: state.cards },
         envelope,
-      ),
-    ),
+      );
+      // A peer's card.moved/delete is authoritative — bump that card's move
+      // version so any local move of it still in flight won't roll back over it.
+      const cardId = envelope.payload.cardId;
+      if (
+        cardId &&
+        (envelope.type === 'card.moved' || envelope.type === 'card.deleted')
+      ) {
+        return {
+          ...patch,
+          moveVersions: {
+            ...state.moveVersions,
+            [cardId]: (state.moveVersions[cardId] ?? 0) + 1,
+          },
+        };
+      }
+      return patch;
+    }),
 
   moveCard: async (cardId, fromListId, toListId, toIndex) => {
     // Remember only where *this* card came from, so a failed persist reverts
@@ -136,6 +160,14 @@ export const useBoardStore = create<BoardStore>((set, get) => ({
     // persist must restore it so the reverted card stays a valid ordering
     // reference for a later peer `card.moved`.
     const originalPositionIdx = get().cards[cardId]?.positionIdx;
+    // Tag this move with a per-card version. A later move of the same card
+    // (local, or a peer's card.moved/delete) bumps it; on failure we only roll
+    // back if ours is still the latest, so we never clobber a newer move —
+    // whether it reorders within the same list or moves to another.
+    const version = (get().moveVersions[cardId] ?? 0) + 1;
+    set((state) => ({
+      moveVersions: { ...state.moveVersions, [cardId]: version },
+    }));
 
     // Optimistic update — render the card in the target position immediately.
     set((state) => {
@@ -164,29 +196,29 @@ export const useBoardStore = create<BoardStore>((set, get) => ({
       // Targeted rollback: pull the card back out of the target list and drop
       // it at its original index, leaving any other cards' moves untouched.
       set((state) => {
-        // The optimistic move cleared this card's key. If it's re-keyed (or the
-        // card is gone) by the time the persist rejects, a peer's `card.moved`
-        // (or delete) landed while we were in flight — that's a confirmed,
-        // authoritative change, so surface the error without clobbering it.
         const current = state.cards[cardId];
-        if (!current || current.positionIdx !== undefined) {
+        // Only the latest move for this card may roll back. A newer local move
+        // or a peer's card.moved/delete bumps the version; the card being gone
+        // means a peer deleted it. In any of those cases this stale rollback is
+        // skipped so it can't clobber the newer, authoritative state.
+        if (!current || state.moveVersions[cardId] !== version) {
           return { moveError: err instanceof Error ? err.message : 'Move failed' };
         }
         const lists = state.lists.map((l) => ({ ...l, cardIds: [...l.cardIds] }));
         const from = lists.find((l) => l.id === fromListId);
         const to = lists.find((l) => l.id === toListId);
-        if (!from || !to) return state;
+        if (!from || !to) {
+          return { moveError: err instanceof Error ? err.message : 'Move failed' };
+        }
         const currentIndex = to.cardIds.indexOf(cardId);
         if (currentIndex !== -1) {
           to.cardIds.splice(currentIndex, 1);
           from.cardIds.splice(originalIndex, 0, cardId);
         }
-        // Restore the server key the optimistic move cleared — but only when we
-        // actually reverted the list position. If `currentIndex === -1` the card
-        // was moved again before this persist failed, so restoring the old key
-        // would clobber the newer in-flight move's cleared state.
+        // Restore the server key the optimistic move cleared, so the reverted
+        // card stays a valid ordering reference for a later peer `card.moved`.
         const cards =
-          currentIndex !== -1 && originalPositionIdx !== undefined
+          originalPositionIdx !== undefined
             ? {
                 ...state.cards,
                 [cardId]: { ...current, positionIdx: originalPositionIdx },
