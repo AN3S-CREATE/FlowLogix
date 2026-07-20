@@ -3,6 +3,10 @@ import { VeralogixLogo } from '../branding/VeralogixLogo';
 import { AvatarStack } from './AvatarStack';
 import { ConnectionStatus } from './ConnectionStatus';
 import { PrimaryButton } from '../ui/PrimaryButton';
+import { isApiMode } from '../../api/config';
+import { logout } from '../../api/authApi';
+import { BrandedAvatar } from '../branding/BrandedAvatar';
+import { getAuthUser } from '../../api/session';
 
 /**
  * Corporate navigation bar (Charcoal) carrying the inline Veralogix logo,
@@ -12,8 +16,8 @@ export function AppHeader() {
   const board = useBoardStore((s) => s.board);
   const lists = useBoardStore((s) => s.lists);
   const addCard = useBoardStore((s) => s.addCard);
-  // A board-level quick-add drops a new card into the first (leftmost) list.
   const firstListId = lists[0]?.id;
+  const user = isApiMode() ? getAuthUser() : null;
 
   return (
     <header className="flex items-center justify-between gap-4 bg-veralogix-charcoal px-6 py-3 shadow-sm">
@@ -28,8 +32,28 @@ export function AppHeader() {
       <div className="flex items-center gap-4">
         <ConnectionStatus />
         <AvatarStack memberIds={board.memberIds} size={30} ring max={5} />
+        {user && (
+          <div className="hidden items-center gap-2 sm:flex" title={user.email}>
+            <BrandedAvatar
+              firstName={user.firstName}
+              lastName={user.lastName}
+              size={30}
+              ring
+            />
+            <button
+              type="button"
+              onClick={() => {
+                logout();
+                window.location.reload();
+              }}
+              className="text-xs font-medium text-white/70 hover:text-white"
+            >
+              Sign out
+            </button>
+          </div>
+        )}
         <PrimaryButton
-          onClick={() => firstListId && addCard(firstListId, 'New card')}
+          onClick={() => firstListId && void addCard(firstListId, 'New card')}
           disabled={!firstListId}
         >
           <svg viewBox="0 0 16 16" className="h-4 w-4" aria-hidden="true" fill="currentColor">

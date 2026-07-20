@@ -14,6 +14,8 @@ beforeEach(() => {
     moveError: null,
     needsResync: false,
     connectionStatus: 'idle',
+    boardLoading: false,
+    boardLoadError: null,
   });
 });
 

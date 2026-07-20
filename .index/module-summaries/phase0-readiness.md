@@ -1,6 +1,6 @@
 # Phase 0 — Production Readiness Discovery (2026-07-20)
 
-**Status:** Discovery complete. Phase 1 Quick Wins applied 2026-07-20 — see `.index/module-summaries/phase1-quick-wins.md`.
+**Status:** Discovery complete. Phase 1 Quick Wins + Phase 2 Core Hardening applied 2026-07-20 — see `.index/module-summaries/phase1-quick-wins.md` and `phase2-core-hardening.md`.
 
 **Canvas:** `C:\Users\verac\.cursor\projects\d-Github-Cersor-FlowLogix\canvases\phase0-readiness-scorecard.canvas.tsx`
 
@@ -34,8 +34,8 @@
 
 ```mermaid
 flowchart LR
-  SPA[React SPA] -->|optional WS| GW[Socket.io Gateway]
-  SPA -.->|gap: no REST client| API[NestJS API]
+  SPA[React SPA] -->|JWT REST| API[NestJS API]
+  SPA -->|optional WS| GW[Socket.io Gateway]
   Mobile[Mobile Sync Module] -->|POST /sync| API
   API --> PG[(Postgres + RLS)]
   API --> Redis[(Redis Pub/Sub)]

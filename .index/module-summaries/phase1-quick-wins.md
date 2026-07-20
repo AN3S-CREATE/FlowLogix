@@ -1,6 +1,6 @@
 # Phase 1 — Quick Wins (2026-07-20)
 
-**Status:** Implemented (uncommitted). Ready for human review.
+**Status:** Implemented and pushed (`bf50683`). Superseded for next work by Phase 2 — see `phase2-core-hardening.md`.
 
 **Baseline (Phase 0):** 60/100 → **Estimated after Phase 1: ~68–70/100**
 

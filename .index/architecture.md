@@ -7,7 +7,7 @@ Collaborative multi-tenant Kanban platform (NestJS API + React SPA + RN offline 
 | Layer | Path | Role |
 |-------|------|------|
 | API | `backend/` | NestJS: boards/lists/cards/comments, JWT auth, RLS tenant context, `/sync`, Socket.io realtime |
-| Web | `frontend/` | React + Vite + Tailwind + Zustand (demo store; optional WS; REST hydration gap) |
+| Web | `frontend/` | React + Vite + Tailwind + Zustand; JWT+REST hydrate when `VITE_API_URL` set; optional WS; offline demo otherwise |
 | Mobile | `mobile/` | Offline-first CRDT sync + attachment queue (WatermelonDB ports) |
 | Local data | `docker-compose.yml` | Postgres :5432, MongoDB :27018 (host remap), Redis :6379 |
 | Prod stack | `docker-compose.prod.yml` | Nginx TLS, 3 API replicas, Redis master/replica, Prometheus, Grafana |
@@ -35,3 +35,10 @@ Collaborative multi-tenant Kanban platform (NestJS API + React SPA + RN offline 
 
 - Phase 0 baseline: **60/100** — see `.index/module-summaries/phase0-readiness.md`.
 - Phase 1 Quick Wins: **~68–70/100** (est.) — see `.index/module-summaries/phase1-quick-wins.md`.
+- Phase 2 Core Hardening: **~76–80/100** (est.) — see `.index/module-summaries/phase2-core-hardening.md`.
+
+## Frontend API mode (Phase 2)
+
+- `VITE_API_URL` → login gate, REST board hydrate, PATCH moves, `needsResync` → `refetchBoard`.
+- WS org from JWT session; URL from `VITE_WS_URL` or API origin.
+- Card moves send neighbor ids; Nest mints Base62 `position_idx`.

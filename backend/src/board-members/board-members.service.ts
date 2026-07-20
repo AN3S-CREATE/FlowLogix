@@ -32,7 +32,17 @@ export class BoardMembersService {
 
   async findAll(boardId: string, orgId: string): Promise<BoardMember[]> {
     await this.tenantAccess.assertBoardInOrg(boardId, orgId);
-    return this.boardMembersRepo.find({ where: { boardId } });
+    const rows = await this.boardMembersRepo.find({
+      where: { boardId },
+      relations: { user: true },
+    });
+    // Never leak password hashes to the SPA (relation load includes the column).
+    for (const row of rows) {
+      if (row.user) {
+        delete (row.user as { passwordHash?: string }).passwordHash;
+      }
+    }
+    return rows;
   }
 
   async findOne(

@@ -1,14 +1,15 @@
 import { AppHeader } from './components/board/AppHeader';
 import { Board } from './components/board/Board';
+import { AuthGate } from './components/auth/AuthGate';
 import { useBoardSocket } from './realtime/useBoardSocket';
 
 /**
  * LogixFlow shell — the charcoal corporate header over the cool-grey board
  * canvas, per the Veralogix brand standards.
  */
-function App() {
+function BoardShell() {
   // Bind the realtime socket to the store for the app's lifetime (no-op unless
-  // a backend is configured via VITE_WS_URL / VITE_ORG_ID).
+  // a backend WS URL is configured and we know the tenant org).
   useBoardSocket();
 
   return (
@@ -18,6 +19,14 @@ function App() {
         <Board />
       </main>
     </div>
+  );
+}
+
+function App() {
+  return (
+    <AuthGate>
+      <BoardShell />
+    </AuthGate>
   );
 }
 

@@ -11,4 +11,6 @@
 | 2026-07-20 | Phase 0 readiness baseline scored 60/100; no Phase 1+ until user sign-off | Mandate: discovery-only; remediations gated on scope/weights confirmation |
 | 2026-07-20 | Leave local compose running after bootstrap; stop Nest after `/health` smoke | Datastores needed for next work; Nest freed host RAM |
 | 2026-07-20 | Phase 1 = docs + HTTP filter/helmet/throttle + CI mobile; defer SPA REST & audit majors | User "Apply recommended" → Quick Wins; `--force` majors too risky |
-| 2026-07-20 | Do not commit Phase 1 until user asks | Explicit no-commit constraint |
+| 2026-07-20 | Phase 1 committed + mirrored to all three remotes (`bf50683`) | User explicitly requested commit+push |
+| 2026-07-20 | Phase 2 = SPA JWT/REST hydrate + needsResync refetch; server mints move keys from neighbors | P1+P5; frontend never invents `positionIdx` |
+| 2026-07-20 | SPA API mode opt-in via `VITE_API_URL` (demo seed otherwise) | Preserve offline demo without backend |

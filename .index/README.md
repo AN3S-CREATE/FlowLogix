@@ -19,3 +19,4 @@ Living, queryable project context for humans and coding agents. Relative paths f
 |------|---------|
 | `module-summaries/phase0-readiness.md` | Phase 0 production readiness audit |
 | `module-summaries/phase1-quick-wins.md` | Phase 1 Quick Wins remediation report |
+| `module-summaries/phase2-core-hardening.md` | Phase 2 SPA REST+JWT + needsResync refetch |

@@ -76,22 +76,18 @@ yet. Notable gaps between the rules and the current code:
   ownership check on join and a Redis-backed replay log for reconnect
   delta-sync. The client half is `frontend/src/realtime/boardSocketManager.ts`.
 - **Frontend.** The branded React SPA and the Zustand optimistic-update store
-  are in place, and live frames are now wired into the store. `App` mounts
-  `useBoardSocket` (`frontend/src/realtime/useBoardSocket.ts`), which binds the
-  `BoardSocketManager` to the store: inbound `board:mutation` frames run through
-  the pure reducer `store/remoteMutations.ts` (`reconcileRemoteMutation`), and
-  connection state drives a header `ConnectionStatus` pill. Because the deltas
-  are lightweight (§4), the reducer splits the cases — **structural** frames
-  (`card.moved`/`card.deleted`/`list.deleted`) apply directly, ordering moved
-  cards by their server `positionIdx` key (client `Card.positionIdx` is optional
-  server-supplied metadata; the frontend never mints keys), while **content**
-  frames (`*.created`/`*.updated`, unrenderable from ids alone) flip a
-  `needsResync` flag that surfaces a "Board updated — refresh" banner. The socket
-  only activates when `VITE_WS_URL` + `VITE_ORG_ID` are set, so the board still
-  runs as a self-contained offline demo otherwise. Pure logic is vitest-tested
-  (`remoteMutations.test.ts`). Remaining frontend gaps: a REST hydration client
-  to turn `needsResync` into targeted refetches, and migrating drag-and-drop from
-  `@hello-pangea/dnd` to the `.cursorrules`-specified
+  are in place, and live frames are wired into the store. With `VITE_API_URL`
+  set, `AuthGate` requires JWT login (`POST /auth/login`), hydrates the active
+  board via REST (`frontend/src/api/`), and persists DnD moves with optimistic
+  UI + rollback on non-2xx (`PATCH /cards/:id` with `beforeCardId`/`afterCardId`
+  so the server mints fractional keys — the client never invents them).
+  `needsResync` (content WS frames or sync gaps) triggers `refetchBoard` for a
+  targeted snapshot instead of a hard reload. `App` mounts `useBoardSocket`
+  (`frontend/src/realtime/useBoardSocket.ts`): org comes from the JWT session
+  (fallback `VITE_ORG_ID`); WS URL from `VITE_WS_URL` or `VITE_API_URL`. Without
+  `VITE_API_URL` the board still runs as an offline demo. Pure logic is
+  vitest-tested (`remoteMutations.test.ts`, `mapBoard.test.ts`). Remaining gap:
+  migrating drag-and-drop from `@hello-pangea/dnd` to the `.cursorrules`-specified
   `@atlaskit/pragmatic-drag-and-drop`.
 - **Mobile offline-first sync.** Implemented in the `mobile/` workspace
   (`mobile/src/`). `crdt/` holds the LWW-CRDT primitives — a strictly-monotonic

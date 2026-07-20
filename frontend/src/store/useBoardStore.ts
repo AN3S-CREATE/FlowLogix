@@ -4,6 +4,10 @@ import { seedBoard, seedCards, seedLists, seedMembers } from './seed';
 import { persistCardMove } from './persistence';
 import { reconcileRemoteMutation } from './remoteMutations';
 import { BoardConnectionStatus, BoardMutationEnvelope } from '../realtime/types';
+import { BoardSnapshot } from '../api/mapBoard';
+import { isApiMode } from '../api/config';
+import { apiCreateCard, fetchBoardSnapshot } from '../api/boardLoader';
+import { mapApiCard } from '../api/mapBoard';
 
 interface BoardSlice {
   board: BoardSummary;
@@ -16,7 +20,14 @@ interface BoardSlice {
    * same list or across lists) never clobber one another.
    */
   moveVersions: Record<Id, number>;
-  addCard: (listId: Id, title: string) => void;
+  /** Replace local board state from a REST snapshot (hydrate / resync). */
+  hydrateBoard: (snapshot: BoardSnapshot) => void;
+  /**
+   * Re-fetch the active board from the API and clear `needsResync`.
+   * No-op when API mode is off.
+   */
+  refetchBoard: () => Promise<void>;
+  addCard: (listId: Id, title: string) => Promise<void>;
   toggleChecklistItem: (cardId: Id, itemId: Id) => void;
   /**
    * Moves a card optimistically (state updates before the network call) and
@@ -53,11 +64,16 @@ interface UiSlice {
    * can't reconstruct from the lightweight frame — the UI prompts a refetch.
    */
   needsResync: boolean;
+  /** True while the initial / targeted board fetch is in flight. */
+  boardLoading: boolean;
+  boardLoadError: string | null;
   setDraggingCardId: (id: Id | null) => void;
   clearMoveError: () => void;
   setConnectionStatus: (status: BoardConnectionStatus | 'idle') => void;
   markNeedsResync: () => void;
   clearNeedsResync: () => void;
+  setBoardLoading: (loading: boolean) => void;
+  setBoardLoadError: (message: string | null) => void;
 }
 
 export type BoardStore = BoardSlice & MembersSlice & UiSlice;
@@ -77,11 +93,15 @@ export const useBoardStore = create<BoardStore>((set, get) => ({
   moveError: null,
   connectionStatus: 'idle',
   needsResync: false,
+  boardLoading: false,
+  boardLoadError: null,
   setDraggingCardId: (id) => set({ draggingCardId: id }),
   clearMoveError: () => set({ moveError: null }),
   setConnectionStatus: (status) => set({ connectionStatus: status }),
   markNeedsResync: () => set({ needsResync: true }),
   clearNeedsResync: () => set({ needsResync: false }),
+  setBoardLoading: (boardLoading) => set({ boardLoading }),
+  setBoardLoadError: (boardLoadError) => set({ boardLoadError }),
 
   // --- board slice ---
   board: seedBoard,
@@ -89,12 +109,44 @@ export const useBoardStore = create<BoardStore>((set, get) => ({
   cards: seedCards,
   moveVersions: {},
 
-  addCard: (listId, title) =>
-    set((state) => {
-      const trimmed = title.trim();
-      if (!trimmed) return state;
-      // Never orphan a card against a list that no longer exists.
-      if (!state.lists.some((l) => l.id === listId)) return state;
+  hydrateBoard: (snapshot) =>
+    set({
+      board: snapshot.board,
+      lists: snapshot.lists,
+      cards: snapshot.cards,
+      members: snapshot.members,
+      moveVersions: {},
+      needsResync: false,
+      moveError: null,
+      boardLoadError: null,
+      boardLoading: false,
+    }),
+
+  refetchBoard: async () => {
+    if (!isApiMode()) {
+      set({ needsResync: false });
+      return;
+    }
+    const boardId = get().board.id;
+    set({ boardLoading: true, boardLoadError: null });
+    try {
+      const snapshot = await fetchBoardSnapshot(boardId);
+      get().hydrateBoard(snapshot);
+    } catch (err) {
+      set({
+        boardLoading: false,
+        boardLoadError:
+          err instanceof Error ? err.message : 'Failed to refresh board',
+      });
+    }
+  },
+
+  addCard: async (listId, title) => {
+    const trimmed = title.trim();
+    if (!trimmed) return;
+    if (!get().lists.some((l) => l.id === listId)) return;
+
+    if (!isApiMode()) {
       const id = createId();
       const card: Card = {
         id,
@@ -104,13 +156,67 @@ export const useBoardStore = create<BoardStore>((set, get) => ({
         checklist: [],
         isComplete: false,
       };
-      return {
+      set((state) => ({
         cards: { ...state.cards, [id]: card },
         lists: state.lists.map((l) =>
           l.id === listId ? { ...l, cardIds: [...l.cardIds, id] } : l,
         ),
-      };
-    }),
+      }));
+      return;
+    }
+
+    const tempId = createId();
+    const optimistic: Card = {
+      id: tempId,
+      title: trimmed,
+      priority: 'medium',
+      assigneeIds: [],
+      checklist: [],
+      isComplete: false,
+    };
+    set((state) => ({
+      cards: { ...state.cards, [tempId]: optimistic },
+      lists: state.lists.map((l) =>
+        l.id === listId ? { ...l, cardIds: [...l.cardIds, tempId] } : l,
+      ),
+      moveError: null,
+    }));
+
+    try {
+      const created = await apiCreateCard(listId, trimmed);
+      const mapped = mapApiCard(created);
+      set((state) => {
+        const { [tempId]: _removed, ...rest } = state.cards;
+        return {
+          cards: { ...rest, [mapped.id]: mapped },
+          lists: state.lists.map((l) =>
+            l.id === listId
+              ? {
+                  ...l,
+                  cardIds: l.cardIds.map((id) =>
+                    id === tempId ? mapped.id : id,
+                  ),
+                }
+              : l,
+          ),
+        };
+      });
+    } catch (err) {
+      set((state) => {
+        const { [tempId]: _removed, ...rest } = state.cards;
+        return {
+          cards: rest,
+          lists: state.lists.map((l) =>
+            l.id === listId
+              ? { ...l, cardIds: l.cardIds.filter((id) => id !== tempId) }
+              : l,
+          ),
+          moveError:
+            err instanceof Error ? err.message : 'Failed to create card',
+        };
+      });
+    }
+  },
 
   toggleChecklistItem: (cardId, itemId) =>
     set((state) => {
@@ -190,8 +296,38 @@ export const useBoardStore = create<BoardStore>((set, get) => ({
       return { lists, cards, moveError: null };
     });
 
+    const target = get().lists.find((l) => l.id === toListId);
+    const idx = target ? target.cardIds.indexOf(cardId) : -1;
+    const beforeCardId =
+      idx > 0 && target ? target.cardIds[idx - 1] : undefined;
+    const afterCardId =
+      idx >= 0 && target && idx < target.cardIds.length - 1
+        ? target.cardIds[idx + 1]
+        : undefined;
+
     try {
-      await persistCardMove({ cardId, fromListId, toListId, toIndex });
+      const result = await persistCardMove({
+        cardId,
+        fromListId,
+        toListId,
+        toIndex,
+        beforeCardId,
+        afterCardId,
+      });
+      // Stamp the server-minted key so later peer moves / local reorders have a
+      // valid ordering reference (WS card.moved frames also re-key).
+      if (result.positionIdx !== undefined) {
+        set((state) => {
+          const current = state.cards[cardId];
+          if (!current || state.moveVersions[cardId] !== version) return state;
+          return {
+            cards: {
+              ...state.cards,
+              [cardId]: { ...current, positionIdx: result.positionIdx },
+            },
+          };
+        });
+      }
     } catch (err) {
       // Targeted rollback: pull the card back out of the target list and drop
       // it at its original index, leaving any other cards' moves untouched.

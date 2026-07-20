@@ -57,10 +57,16 @@ for how isolation is enforced.
 ### 4. Run the frontend
 
 ```bash
+cp frontend/.env.example frontend/.env.local   # sets VITE_API_URL=http://localhost:3000
+npm run seed --workspace backend               # once: demo org/user/boards
 npm run dev:frontend
 ```
 
-The app starts on `http://localhost:5173`.
+The app starts on `http://localhost:5173`. With `VITE_API_URL` set it shows a
+JWT login gate (seeded user `andries@veralogix.co.za` / `Veralogix#2026`), then
+hydrates the board from REST. Omit `VITE_API_URL` to keep the offline demo seed.
+Card moves PATCH `/cards/:id` with neighbor ids so the API mints fractional
+keys; `needsResync` triggers a targeted board refetch instead of a full reload.
 
 ## Project structure
 

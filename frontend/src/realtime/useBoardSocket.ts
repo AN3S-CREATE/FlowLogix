@@ -1,24 +1,27 @@
 import { useEffect } from 'react';
 import { BoardSocketManager } from './boardSocketManager';
 import { useBoardStore } from '../store/useBoardStore';
+import { getWsUrl } from '../api/config';
+import { getAuthUser } from '../api/session';
 
 /**
  * Binds the framework-agnostic {@link BoardSocketManager} to the Zustand store
  * for the lifetime of the board view: live `board:mutation` frames flow into
  * `applyRemoteMutation`, connection state into the header pill, and an
- * unrecoverable delta-sync gap flips `needsResync`.
+ * unrecoverable delta-sync gap flips `needsResync` (which triggers a targeted
+ * REST refetch when API mode is on).
  *
- * The socket only activates when both `VITE_WS_URL` and `VITE_ORG_ID` are set;
- * otherwise the board runs as a self-contained offline demo (status `idle`) and
- * no connection is attempted. Identity/tenant still come from the backend JWT —
- * `VITE_ORG_ID` is only the dev handshake hint for local runs.
+ * Activates when a WS URL is available (`VITE_WS_URL` or `VITE_API_URL`) and an
+ * org id is known (JWT session, else `VITE_ORG_ID` for local handshake).
+ * Otherwise the board runs as a self-contained offline demo (status `idle`).
  */
 export function useBoardSocket(): void {
   const boardId = useBoardStore((s) => s.board.id);
 
   useEffect(() => {
-    const url = import.meta.env.VITE_WS_URL;
-    const orgId = import.meta.env.VITE_ORG_ID;
+    const url = getWsUrl();
+    const sessionOrg = getAuthUser()?.orgId;
+    const orgId = sessionOrg ?? import.meta.env.VITE_ORG_ID?.trim();
     const {
       applyRemoteMutation,
       setConnectionStatus,
