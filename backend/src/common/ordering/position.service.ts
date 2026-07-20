@@ -21,9 +21,14 @@ export class PositionService {
     return this.indexer.getIntermediateKey(last, null);
   }
 
+  /** True if `key` is a well-formed Base62 fractional-index key. */
+  isValid(key: string): boolean {
+    return this.indexer.isValidKey(key);
+  }
+
   /** Validate a client-supplied key, throwing 400 rather than corrupting order. */
   assertValid(key: string): void {
-    if (!this.indexer.isValidKey(key)) {
+    if (!this.isValid(key)) {
       throw new BadRequestException(`Invalid position key: ${key}`);
     }
   }

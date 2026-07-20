@@ -65,8 +65,8 @@ yet. Notable gaps between the rules and the current code:
   Lists/Cards compute an append-to-end key on create (or validate a
   client-supplied key) and validate keys on move. `PositionRebalanceService` is
   a daily `@Cron` that re-spreads any column whose keys exceed 32 chars
-  (precision-bloat guard, §3.3.3). The `/sync` merge still leaves `position_idx`
-  out of scope (content fields only).
+  (precision-bloat guard, §3.3.3). `/sync` merges `positionIdx` (and parent
+  `listId`/`boardId`) under the same field-level LWW as content fields.
 - **Real-time websockets.** Implemented. `backend/src/realtime/` holds the
   Socket.io gateway, the Redis Pub/Sub service, and `BoardEventsService` — the
   service-layer capture point that publishes lightweight `{ cardId, listId,
@@ -105,7 +105,7 @@ yet. Notable gaps between the rules and the current code:
   suitable (the `expo-task-manager` / `expo-background-task` surface is an
   injected `BackgroundTaskHost` port). `model/` has the WatermelonDB
   schema/models (per-field `*_updated_at` columns) and the port adapters. Pure
-  logic is unit-tested with vitest (46 tests); the React Native UI and native
+  logic is unit-tested with vitest (48 tests); the React Native UI and native
   SQLite/NetInfo/Expo wiring live behind injectable ports.
 - **Server `/sync` endpoint.** Implemented in `backend/src/sync/`. `sync-merge.ts`
   is the master half of the mobile `mergeRecord` — a pure field-level LWW merge
@@ -116,10 +116,11 @@ yet. Notable gaps between the rules and the current code:
   CRDT metadata via the `AddSyncClocks` migration — additive `sync_clocks` (jsonb
   `<field>→epoch-µs`), `node_id`, and `sync_deleted_at` columns on
   `boards`/`lists`/`cards`, mapped on the entities (`bigintToNumber` transformer).
-  Jest-tested (mocked DataSource). **v1 scope:** merges *content* fields
-  (`title`/`description`/`isComplete`) of existing records; `position_idx` and
-  parent-move sync wait on the `FractionalIndexer` column migration, and
-  first-time inserts of offline-created records still go through the CRUD routes.
+  Jest-tested (mocked DataSource). **v2 / Phase 3 scope:** merges content fields
+  plus `positionIdx` and parent refs (`listId`/`boardId`); validates Base62 keys
+  via `PositionService`; accepts first-time inserts of offline-created UUID rows
+  when the parent is in-org (RLS tenant context). Older clients that omit
+  structural fields keep content-only merge behaviour.
 
 When you implement any of the above, follow `.cursorrules` and update this
 status list.

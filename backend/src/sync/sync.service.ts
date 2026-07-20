@@ -5,11 +5,13 @@ import {
   EntityManager,
   EntityTarget,
   ObjectLiteral,
+  QueryFailedError,
 } from 'typeorm';
 import { QueryDeepPartialEntity } from 'typeorm/query-builder/QueryPartialEntity';
-import { Board } from '../boards/board.entity';
+import { Board, BoardVisibility } from '../boards/board.entity';
 import { List } from '../lists/list.entity';
 import { Card } from '../cards/card.entity';
+import { PositionService } from '../common/ordering/position.service';
 import { runInTenantContext } from '../common/tenant/tenant-transaction.util';
 import {
   SyncChangeDto,
@@ -26,6 +28,9 @@ type SyncRow = {
   syncDeletedAt: number | null;
 } & Record<string, unknown>;
 
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 interface CollectionStrategy {
   /** The entity, used both to load and to issue a targeted partial update. */
   readonly entity: EntityTarget<ObjectLiteral>;
@@ -37,24 +42,33 @@ interface CollectionStrategy {
     id: string,
     orgId: string,
   ): Promise<SyncRow | null>;
+  /**
+   * Insert an offline-created row when the id is unseen. Returns true when the
+   * insert committed; false when the payload is incomplete / parent out-of-org
+   * (client keeps the change pending). Throws on unexpected DB errors.
+   */
+  tryInsert(
+    manager: EntityManager,
+    orgId: string,
+    change: SyncChangeDto,
+    positions: PositionService,
+  ): Promise<boolean>;
 }
 
 /**
  * Server master for the mobile offline-first `/sync` endpoint.
  *
- * For every change in the client's sync log it loads the org-scoped master row,
- * runs field-by-field Last-Write-Wins (`mergeServerRecord`), writes back any
- * field the client won, and echoes any record where the server is newer — all
- * inside one tenant transaction so the boards RLS policy is enforced.
+ * For every change in the client's sync log it loads the org-scoped master row
+ * (or inserts a new offline-created row), runs field-by-field Last-Write-Wins
+ * (`mergeServerRecord`), writes back any field the client won, and echoes any
+ * record where the server is newer — all inside one tenant transaction so RLS
+ * is enforced.
  *
- * **Scope (v1).** Merges the *content* fields (`title`, `description`,
- * `isComplete`) of existing records — exactly the field-level conflict
- * resolution the client needs for concurrent edits. Structural fields
- * (`position_idx`, parent `list_id`/`board_id`) stay on the dedicated move
- * endpoints (the server column is still `double precision`, pending the
- * FractionalIndexer migration), and first-time inserts of offline-created
- * records go through the normal create routes. Unseen/out-of-org ids are simply
- * not accepted, so the client keeps them pending.
+ * **Scope (v2 / Phase 3).** Merges content fields plus structural sync fields
+ * (`positionIdx`, `listId` / `boardId`) under LWW, and accepts first-time
+ * inserts of offline-created records when the parent is in-org and the client
+ * id is a UUID. Invalid Base62 `positionIdx` values are dropped (never written);
+ * older clients that omit structural fields keep content-only merge behaviour.
  */
 @Injectable()
 export class SyncService {
@@ -68,28 +82,146 @@ export class SyncService {
         manager.findOne(Board, {
           where: { id, orgId },
         }) as Promise<SyncRow | null>,
+      tryInsert: async (manager, orgId, change) => {
+        if (!isUuid(change.id)) return false;
+        const title = asNonEmptyString(change.fields.title);
+        if (title === null) return false;
+        const clocks = numericClocks(change.clocks, ['title']);
+        try {
+          await manager.insert(Board, {
+            id: change.id,
+            orgId,
+            title,
+            description: null,
+            visibility: BoardVisibility.PRIVATE,
+            syncClocks: clocks,
+            nodeId: change.nodeId || null,
+            syncDeletedAt: change.deletedAt,
+          });
+          return true;
+        } catch (err) {
+          if (isUniqueViolation(err)) return false;
+          throw err;
+        }
+      },
     },
     lists: {
       entity: List,
-      syncFields: ['title'],
+      syncFields: ['title', 'boardId', 'positionIdx'],
       load: (manager, id, orgId) =>
         manager.findOne(List, {
           where: { id, board: { orgId } },
           relations: { board: true },
         }) as Promise<SyncRow | null>,
+      tryInsert: async (manager, orgId, change, positions) => {
+        if (!isUuid(change.id)) return false;
+        const title = asNonEmptyString(change.fields.title);
+        const boardId = asUuid(change.fields.boardId);
+        if (title === null || boardId === null) return false;
+        if (!(await boardInOrg(manager, boardId, orgId))) return false;
+
+        const positionIdx = await resolvePositionKey(
+          positions,
+          change.fields.positionIdx,
+          async () => {
+            const last = await manager.findOne(List, {
+              where: { boardId },
+              order: { positionIdx: 'DESC' },
+            });
+            return last ? last.positionIdx : null;
+          },
+        );
+
+        const clocks = numericClocks(change.clocks, [
+          'title',
+          'boardId',
+          'positionIdx',
+        ]);
+        try {
+          await manager.insert(List, {
+            id: change.id,
+            boardId,
+            title,
+            positionIdx,
+            syncClocks: clocks,
+            nodeId: change.nodeId || null,
+            syncDeletedAt: change.deletedAt,
+          });
+          return true;
+        } catch (err) {
+          if (isUniqueViolation(err)) return false;
+          throw err;
+        }
+      },
     },
     cards: {
       entity: Card,
-      syncFields: ['title', 'description', 'isComplete'],
+      syncFields: ['title', 'description', 'isComplete', 'listId', 'positionIdx'],
       load: (manager, id, orgId) =>
         manager.findOne(Card, {
           where: { id, list: { board: { orgId } } },
           relations: { list: { board: true } },
         }) as Promise<SyncRow | null>,
+      tryInsert: async (manager, orgId, change, positions) => {
+        if (!isUuid(change.id)) return false;
+        const title = asNonEmptyString(change.fields.title);
+        const listId = asUuid(change.fields.listId);
+        if (title === null || listId === null) return false;
+        if (!(await listInOrg(manager, listId, orgId))) return false;
+
+        const positionIdx = await resolvePositionKey(
+          positions,
+          change.fields.positionIdx,
+          async () => {
+            const last = await manager.findOne(Card, {
+              where: { listId },
+              order: { positionIdx: 'DESC' },
+            });
+            return last ? last.positionIdx : null;
+          },
+        );
+
+        const description =
+          typeof change.fields.description === 'string'
+            ? change.fields.description
+            : null;
+        const isComplete =
+          typeof change.fields.isComplete === 'boolean'
+            ? change.fields.isComplete
+            : false;
+
+        const clocks = numericClocks(change.clocks, [
+          'title',
+          'description',
+          'isComplete',
+          'listId',
+          'positionIdx',
+        ]);
+        try {
+          await manager.insert(Card, {
+            id: change.id,
+            listId,
+            title,
+            description,
+            isComplete,
+            positionIdx,
+            syncClocks: clocks,
+            nodeId: change.nodeId || null,
+            syncDeletedAt: change.deletedAt,
+          });
+          return true;
+        } catch (err) {
+          if (isUniqueViolation(err)) return false;
+          throw err;
+        }
+      },
     },
   };
 
-  constructor(@InjectDataSource() private readonly dataSource: DataSource) {}
+  constructor(
+    @InjectDataSource() private readonly dataSource: DataSource,
+    private readonly positions: PositionService,
+  ) {}
 
   async sync(orgId: string, req: SyncRequestDto): Promise<SyncResponseDto> {
     const strategy = this.strategies[req.collection];
@@ -111,10 +243,25 @@ export class SyncService {
 
       for (const change of orderedChanges) {
         // 1) Authorize: resolve the record in-org via the board-ownership chain.
-        // Unseen id or a record in another org: don't accept — the client keeps
-        // it pending and (for genuinely new records) creates it via the CRUD API.
-        const authorized = await strategy.load(manager, change.id, orgId);
-        if (!authorized) continue;
+        let authorized = await strategy.load(manager, change.id, orgId);
+
+        if (!authorized) {
+          // Unseen id: attempt an offline-created insert when the payload is
+          // complete and the parent is in-org. On unique-violation race (another
+          // sync won), fall through to a re-load + merge.
+          const inserted = await strategy.tryInsert(
+            manager,
+            orgId,
+            change,
+            this.positions,
+          );
+          if (inserted) {
+            acceptedIds.push(change.id);
+            continue;
+          }
+          authorized = await strategy.load(manager, change.id, orgId);
+          if (!authorized) continue; // incomplete / out-of-org → keep pending
+        }
 
         // 2) Lock the row FOR UPDATE and re-read its freshly-committed state, so
         // concurrent syncs (or a CRUD write) on the same record serialize instead
@@ -128,6 +275,15 @@ export class SyncService {
         })) as SyncRow | null;
         if (!row) continue;
 
+        const { fields: clientFields, clocks: clientClocks } =
+          await this.sanitizeClientChange(
+            manager,
+            orgId,
+            strategy.syncFields,
+            change.fields,
+            change.clocks,
+          );
+
         const server: RecordState = {
           fields: this.readFields(row, strategy.syncFields),
           clocks: row.syncClocks ?? {},
@@ -135,8 +291,8 @@ export class SyncService {
           deletedAt: row.syncDeletedAt,
         };
         const client: RecordState = {
-          fields: this.filter(change.fields, strategy.syncFields),
-          clocks: this.numericClocks(change.clocks, strategy.syncFields),
+          fields: clientFields,
+          clocks: clientClocks,
           nodeId: change.nodeId,
           deletedAt: change.deletedAt,
         };
@@ -145,8 +301,8 @@ export class SyncService {
 
         if (result.serverChanged) {
           // Targeted update of only the sync columns: writing the whole entity
-          // back (save) would clobber any non-sync column (positionIdx, dueDate,
-          // isArchived, ...) a concurrent CRUD write changed after we loaded it.
+          // back (save) would clobber any non-sync column (dueDate, isArchived,
+          // ...) a concurrent CRUD write changed after we loaded it.
           const patch: Record<string, unknown> = {
             syncClocks: result.merged.clocks,
             nodeId: result.merged.nodeId,
@@ -178,6 +334,67 @@ export class SyncService {
     });
   }
 
+  /**
+   * Keep only synced keys; drop invalid `positionIdx` and out-of-org parents so
+   * a hostile/legacy payload cannot corrupt fractional order or cross tenants.
+   * Dropped fields also drop their clocks — otherwise a high clock with a
+   * missing value would win LWW and wipe the server field.
+   * Older clients that omit structural fields are unaffected (content-only LWW).
+   */
+  private async sanitizeClientChange(
+    manager: EntityManager,
+    orgId: string,
+    fields: readonly string[],
+    sourceFields: Record<string, unknown>,
+    sourceClocks: Record<string, unknown>,
+  ): Promise<{
+    fields: Record<string, unknown>;
+    clocks: Record<string, number>;
+  }> {
+    const outFields: Record<string, unknown> = {};
+    const outClocks: Record<string, number> = {};
+    const rawClocks = numericClocks(sourceClocks, fields);
+
+    for (const field of fields) {
+      if (!Object.prototype.hasOwnProperty.call(sourceFields, field)) continue;
+      const value = sourceFields[field];
+
+      if (field === 'positionIdx') {
+        if (typeof value !== 'string' || !this.positions.isValid(value)) {
+          continue;
+        }
+        outFields[field] = value;
+        if (rawClocks[field] !== undefined) outClocks[field] = rawClocks[field];
+        continue;
+      }
+
+      if (field === 'listId') {
+        const listId = asUuid(value);
+        if (listId === null) continue;
+        if (!(await listInOrg(manager, listId, orgId))) continue;
+        outFields[field] = listId;
+        if (rawClocks[field] !== undefined) outClocks[field] = rawClocks[field];
+        continue;
+      }
+
+      if (field === 'boardId') {
+        const boardId = asUuid(value);
+        if (boardId === null) continue;
+        if (!(await boardInOrg(manager, boardId, orgId))) continue;
+        outFields[field] = boardId;
+        if (rawClocks[field] !== undefined) outClocks[field] = rawClocks[field];
+        continue;
+      }
+
+      outFields[field] = value;
+      if (rawClocks[field] !== undefined) outClocks[field] = rawClocks[field];
+    }
+
+    // Clocks for fields the client omitted entirely are ignored (absent = 0 in
+    // merge). Only clocks for accepted fields participate.
+    return { fields: outFields, clocks: outClocks };
+  }
+
   /** Snapshot the synced entity fields into a plain map for the merge. */
   private readFields(
     row: SyncRow,
@@ -188,44 +405,85 @@ export class SyncService {
     return out;
   }
 
-  /** Keep only the synced keys the client sent (ignore position/parent/etc.). */
-  private filter<T>(
-    source: Record<string, T>,
-    fields: readonly string[],
-  ): Record<string, T> {
-    const out: Record<string, T> = {};
-    for (const field of fields) {
-      if (Object.prototype.hasOwnProperty.call(source, field)) {
-        out[field] = source[field];
-      }
-    }
-    return out;
-  }
-
-  /**
-   * Sanitize the client's clocks: keep only synced keys whose value is a finite
-   * number. `clocks` arrives as an unvalidated JSON object, so a malformed or
-   * hostile payload (a string, NaN, Infinity) must never reach the LWW
-   * comparison — a bad clock would otherwise skew every merge for that record.
-   */
-  private numericClocks(
-    source: Record<string, unknown>,
-    fields: readonly string[],
-  ): Record<string, number> {
-    const out: Record<string, number> = {};
-    for (const field of fields) {
-      const value = source[field];
-      if (typeof value === 'number' && Number.isFinite(value)) {
-        out[field] = value;
-      }
-    }
-    return out;
-  }
-
   /** Strictly-increasing server checkpoint clock (epoch-µs), never repeats. */
   private nowMicros(): number {
     const wall = Date.now() * 1000;
     this.lastMicros = wall > this.lastMicros ? wall : this.lastMicros + 1;
     return this.lastMicros;
   }
+}
+
+/**
+ * Sanitize the client's clocks: keep only synced keys whose value is a finite
+ * number. `clocks` arrives as an unvalidated JSON object, so a malformed or
+ * hostile payload (a string, NaN, Infinity) must never reach the LWW
+ * comparison — a bad clock would otherwise skew every merge for that record.
+ */
+function numericClocks(
+  source: Record<string, unknown>,
+  fields: readonly string[],
+): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const field of fields) {
+    const value = source[field];
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      out[field] = value;
+    }
+  }
+  return out;
+}
+
+function isUuid(value: unknown): boolean {
+  return typeof value === 'string' && UUID_RE.test(value);
+}
+
+function asUuid(value: unknown): string | null {
+  return isUuid(value) ? (value as string) : null;
+}
+
+function asNonEmptyString(value: unknown): string | null {
+  return typeof value === 'string' && value.trim().length > 0 ? value : null;
+}
+
+function isUniqueViolation(err: unknown): boolean {
+  if (!(err instanceof QueryFailedError)) return false;
+  const driver = err.driverError as { code?: string } | undefined;
+  return driver?.code === '23505';
+}
+
+async function boardInOrg(
+  manager: EntityManager,
+  boardId: string,
+  orgId: string,
+): Promise<boolean> {
+  const row = await manager.findOne(Board, { where: { id: boardId, orgId } });
+  return row !== null;
+}
+
+async function listInOrg(
+  manager: EntityManager,
+  listId: string,
+  orgId: string,
+): Promise<boolean> {
+  const row = await manager.findOne(List, {
+    where: { id: listId, board: { orgId } },
+    relations: { board: true },
+  });
+  return row !== null;
+}
+
+/**
+ * Prefer a client-supplied valid Base62 key; otherwise mint an append key after
+ * the current last sibling so offline creates never leave a null/invalid index.
+ */
+async function resolvePositionKey(
+  positions: PositionService,
+  provided: unknown,
+  lastSiblingKey: () => Promise<string | null>,
+): Promise<string> {
+  if (typeof provided === 'string' && positions.isValid(provided)) {
+    return provided;
+  }
+  const last = await lastSiblingKey();
+  return positions.keyForAppend(last);
 }

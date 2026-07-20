@@ -26,10 +26,11 @@
 | `.index/module-summaries/phase0-readiness.md` | Phase 0 readiness audit deliverable (60/100) | Active |
 | `.index/module-summaries/phase1-quick-wins.md` | Phase 1 Quick Wins deliverable (~68–70/100 est.) | Active |
 | `.index/module-summaries/phase2-core-hardening.md` | Phase 2 SPA REST+JWT + resync refetch (~76–80/100 est.) | Active |
+| `.index/module-summaries/phase3-specialized-uplift.md` | Phase 3 sync positionIdx + offline inserts (~84–88/100 est.) | Active |
 | `backend/src/common/filters/` | Global HTTP exception filter + Jest specs | Active |
-| `backend/src/**/*.spec.ts` | Jest unit tests (18 files / 108 tests) | Active |
+| `backend/src/**/*.spec.ts` | Jest unit tests (18 files / 116 tests) | Active |
 | `frontend/src/api/` | REST client, session, board hydrate/map | Active |
 | `frontend/src/components/auth/` | LoginScreen + AuthGate (API mode) | Active |
 | `frontend/.env.example` | `VITE_API_URL` / WS / board id template | Active |
 | `frontend/src/**/*.test.ts` | Vitest store/mutation/mapBoard tests (3) | Active |
-| `mobile/src/**/*.test.ts` | Vitest CRDT/sync/upload tests (5) | Active |
+| `mobile/src/**/*.test.ts` | Vitest CRDT/sync/upload tests (5 files / 48) | Active |
