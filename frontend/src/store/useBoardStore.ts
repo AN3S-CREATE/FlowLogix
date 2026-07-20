@@ -181,10 +181,12 @@ export const useBoardStore = create<BoardStore>((set, get) => ({
           to.cardIds.splice(currentIndex, 1);
           from.cardIds.splice(originalIndex, 0, cardId);
         }
-        // Restore the server key the optimistic move cleared, so the reverted
-        // card stays a valid ordering reference for a later peer `card.moved`.
+        // Restore the server key the optimistic move cleared — but only when we
+        // actually reverted the list position. If `currentIndex === -1` the card
+        // was moved again before this persist failed, so restoring the old key
+        // would clobber the newer in-flight move's cleared state.
         const cards =
-          originalPositionIdx !== undefined
+          currentIndex !== -1 && originalPositionIdx !== undefined
             ? {
                 ...state.cards,
                 [cardId]: { ...current, positionIdx: originalPositionIdx },

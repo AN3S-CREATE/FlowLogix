@@ -58,4 +58,23 @@ describe('moveCard rollback', () => {
     expect(after.lists.find((l) => l.id === 'l2')!.cardIds).not.toContain('c1');
     expect(after.moveError).toBeTruthy();
   });
+
+  it('a failed move does not corrupt a second in-flight move of the same card', async () => {
+    setPersistFailureRate(1);
+    const s = useBoardStore.getState();
+    // Two optimistic moves of c1 back-to-back, both destined to fail.
+    const p1 = s.moveCard('c1', 'l2', 'l1', 0); // l2 -> l1
+    const p2 = useBoardStore.getState().moveCard('c1', 'l1', 'l3', 0); // l1 -> l3
+    await Promise.all([p1, p2]);
+
+    const after = useBoardStore.getState();
+    // The first rollback must not clobber the second move's state: c1 stays in
+    // exactly one list (never duplicated or lost) and the second move rolls back.
+    const appearances = after.lists.filter((l) =>
+      l.cardIds.includes('c1'),
+    ).length;
+    expect(appearances).toBe(1);
+    expect(after.lists.find((l) => l.id === 'l1')!.cardIds).toContain('c1');
+    expect(after.moveError).toBeTruthy();
+  });
 });
