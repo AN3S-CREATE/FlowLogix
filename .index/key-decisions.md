@@ -11,7 +11,7 @@
 | 2026-07-20 | Phase 0 readiness baseline scored 60/100; no Phase 1+ until user sign-off | Mandate: discovery-only; remediations gated on scope/weights confirmation |
 | 2026-07-20 | Leave local compose running after bootstrap; stop Nest after `/health` smoke | Datastores needed for next work; Nest freed host RAM |
 | 2026-07-20 | Phase 1 = docs + HTTP filter/helmet/throttle + CI mobile; defer SPA REST & audit majors | User "Apply recommended" → Quick Wins; `--force` majors too risky |
-| 2026-07-20 | Phase 1 committed + mirrored to all three remotes (`bf50683`) | User explicitly requested commit+push |
+| 2026-07-20 | Phase 1 committed + mirrored to the then-three remotes (`bf50683`); mirror set reduced to two on 2026-07-26 | User explicitly requested commit+push |
 | 2026-07-20 | Phase 2 = SPA JWT/REST hydrate + needsResync refetch; server mints move keys from neighbors | P1+P5; frontend never invents `positionIdx` |
 | 2026-07-20 | SPA API mode opt-in via `VITE_API_URL` (demo seed otherwise) | Preserve offline demo without backend |
 | 2026-07-20 | Phase 3 = sync `positionIdx`/parents + offline inserts; drop invalid keys with clocks | P7; fail-closed multi-tenant; v1 content-only clients compatible |
@@ -23,4 +23,4 @@
 | 2026-07-20 | Phase 5c: Nest 11 via `chore/nest-11` then merge to main → **99/100** | Exact pins + root overrides; clean lockfile avoids nested Nest/rxjs |
 | 2026-07-20 | Express v5: set `query parser` to `extended` in `main.ts` | Preserve nested query parsing vs Express v5 default `simple` |
 | 2026-07-20 | Phase 5d: award **100/100** after live dependency failover drill on local Nest 11 + compose | Evidence of 503→recover on PG/Redis/Mongo; full 3-API stack deferred for RAM |
-| 2026-07-26 | **Drop `VeralogixCatalyst` as a mirror — three remotes → two** (`veralogix` + `an3s`). Retired-remote note added to `AGENTS.md`; do not re-add without owner request | `git ls-remote` returns `Repository not found`; GitHub 404s identically for deleted and inaccessible-private repos, so the cause is undiagnosable from a clone. Owner decision, not a silent drop. Historical Phase 4/5 summaries listing catalyst are dated evidence and left unedited |
+| 2026-07-26 | **Drop `VeralogixCatalyst` as a mirror — three remotes → two** (`veralogix` + `an3s`). Retired-remote note added to `AGENTS.md`; do not re-add without owner request | `git ls-remote` returns `Repository not found`; GitHub 404s identically for deleted and inaccessible-private repos, so the cause is undiagnosable from a clone. Owner decision, not a silent drop. Owner then directed removal **everywhere as a live mirror**: catalyst rows deleted from the Phase 4/5 remote-verification tables, each replaced by a dated retired-mirror note so the audit trail stays honest without listing it as active |

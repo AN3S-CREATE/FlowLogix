@@ -15,9 +15,12 @@ Verified before Phase 5 work. Local `HEAD` was `bfc5d41` (records Phase 4 `a1f30
 | origin | https://github.com/AN3S-CREATE/FlowLogix.git | Yes (ancestor of `bfc5d41`) | Yes (= tip) |
 | an3s | https://github.com/AN3S-CREATE/FlowLogix.git | Yes | Yes |
 | veralogix | https://github.com/veralogix-group-innovation/FlowLogix.git | Yes | Yes |
-| catalyst | https://github.com/VeralogixCatalyst/FlowLogix.git | Yes | Yes |
 
 No catch-up push required for Phase 4.
+
+> A third mirror (`catalyst`) was also verified at this date. It was **retired
+> 2026-07-26** and removed from this table; it is no longer a FlowLogix mirror.
+> See `.index/key-decisions.md` and the "Retired remote" note in `AGENTS.md`.
 
 ---
 

@@ -127,7 +127,8 @@ see Insight 22. Do **not** quote 100/100 as today's operational state.
 - [2026-07-20T20:06+02:00] Cleanup + `.env` with MONGO 27018.
 - [2026-07-20T20:16+02:00] Part A bootstrap Green; Phase 0 audit written (60/100).
 - [2026-07-20T20:25+02:00] Phase 1 Quick Wins; `/health` ok; 106 backend tests; est. ~68–70/100.
-- [2026-07-20T20:35+02:00] Phase 1 committed `bf50683` and pushed to origin/veralogix/an3s/catalyst.
+- [2026-07-20T20:35+02:00] Phase 1 committed `bf50683` and pushed to origin/veralogix/an3s
+  (a third mirror, catalyst, was also pushed at the time — **retired 2026-07-26**, do not push to it).
 - [2026-07-20T20:45+02:00] Phase 2 SPA REST+JWT + needsResync refetch; 108 backend / 21 frontend tests; smoke login+move ok after seed.
 - [2026-07-20T20:55+02:00] Remotes verified at `a000402`; Phase 3 sync positionIdx + offline inserts; 116 backend / 48 mobile tests.
 - [2026-07-20T21:10+02:00] Remotes verified at `4fb971d`; Phase 4 alerts/OPS + sync→WS + delta-pull; 119 backend / 21 frontend / 48 mobile; `/health` ok; committed `a1f30c0` and pushed all remotes.

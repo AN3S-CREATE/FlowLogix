@@ -13,9 +13,12 @@
 | origin | https://github.com/AN3S-CREATE/FlowLogix.git | Yes (same as an3s) |
 | an3s | https://github.com/AN3S-CREATE/FlowLogix.git | Yes |
 | veralogix | https://github.com/veralogix-group-innovation/FlowLogix.git | Yes |
-| catalyst | https://github.com/VeralogixCatalyst/FlowLogix.git | Yes |
 
 No catch-up push required before Phase 4.
+
+> A third mirror (`catalyst`) was also verified at this date. It was **retired
+> 2026-07-26** and removed from this table; it is no longer a FlowLogix mirror.
+> See `.index/key-decisions.md` and the "Retired remote" note in `AGENTS.md`.
 
 ---
 
