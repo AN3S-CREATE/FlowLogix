@@ -1,7 +1,14 @@
 # Repository Analysis State — FlowLogix / LogixFlow
 
 ## Current Analysis Phase & Progress
-Phase 5d HA drill — **complete** (2026-07-20). Score **100/100**. Optional live **prod** HA (`api2` behind LB) — **blocked on credentials / no reachable FlowLogix endpoint** (probed 2026-07-20). No fabricated drill.
+Phase 5d HA drill — **complete** (2026-07-20). Code readiness score **100/100**.
+Optional live **prod** HA (`api2` behind LB) — **blocked on credentials / no reachable FlowLogix endpoint** (probed 2026-07-20). No fabricated drill.
+
+**2026-07-26 daily readiness sweep — operational readiness is NOT 100/100.** The 100/100 was a
+*codebase* score measured on a provisioned host. This working copy is a **fresh clone made
+2026-07-26 04:27** (reflog: `clone: from AN3S-CREATE/FlowLogix`) with no `node_modules`, no `.env`,
+no build output, and no running services. A **P1 build blocker** now prevents provisioning it —
+see Insight 22. Do **not** quote 100/100 as today's operational state.
 
 ## Key Architectural Insights Discovered
 - Insight 1: Local datastores via `docker-compose.yml` (Postgres 5432, Mongo 27018 remapped, Redis 6379); all three healthy after bootstrap.
@@ -25,6 +32,35 @@ Phase 5d HA drill — **complete** (2026-07-20). Score **100/100**. Optional liv
 - Insight 19: Nest 11 / Express v5 defaults to `simple` query parser — set `extended` in `main.ts`.
 - Insight 20: `@nestjs/jwt@11` + jsonwebtoken@9 require `expiresIn` as `ms.StringValue`.
 - Insight 21: Live HA: PG/Redis/Mongo stop → `/health` 503 → restart → 200 ok (~8–10s healthy); host RAM blocks full 3-API prod compose.
+- Insight 22 (**P1, 2026-07-26**): `npm ci` fails from a clean clone on **every** platform —
+  `EBADPLATFORM @esbuild/netbsd-arm64@0.28.1`. `package-lock.json` carries **26 `@esbuild/*`
+  platform packages with `optional: false`**, so npm treats all of them as required. Cause: two
+  esbuild majors coexist — `mobile` pins `vitest@^2.1.4` → vite 5 → `esbuild ^0.21.3` (0.21.5),
+  while `frontend` pins `vite@^8.1.5`/`vitest@^4.1.10` → `esbuild ^0.27||^0.28` (0.28.1). The
+  duplicate nests under `node_modules/esbuild/node_modules/` and npm drops the `optional` flag
+  there, plus on three platforms new in 0.28.1 (netbsd-arm64, openbsd-arm64, openharmony-arm64)
+  that hoist to the root with no 0.21.5 counterpart. **Regenerating the lockfile does not fix it**
+  (npm 11.11.0 reproduces the same 26). **Verified fix:** add `"esbuild": "0.28.1"` to root
+  `overrides` → single esbuild copy, 26 entries, **0 non-optional**. Cleaner alternative: bump
+  `mobile` to vitest 4 so all workspaces share one vite/esbuild major.
+- Insight 23 (**2026-07-26**): CI **masks** Insight 22. `.github/workflows/deploy.yml` runs
+  per-workspace `npm install` (`working-directory: backend|frontend|mobile`) and **never** runs
+  root `npm ci` — so the committed lockfile is never exercised and its pins are not enforced.
+  Green CI ≠ reproducible clean clone.
+- Insight 24 (**2026-07-26**, *resolved same day*): Mirror policy (AGENTS.md) was **broken** —
+  `veralogix` = `ed97742` (1 behind), `an3s`/origin = `0c85f9f`, `catalyst` = **"Repository not
+  found"**; and this clone had only `origin` configured. **Resolved:** owner directed dropping
+  catalyst. Policy is now **two mirrors** (`veralogix` + `an3s`); `AGENTS.md` carries a
+  "Retired remote — do not re-add" note so a future agent doesn't restore it. GitHub 404s
+  identically for deleted and inaccessible-private repos, so the root cause was undiagnosable
+  from a clone — recorded as such rather than guessed.
+- Insight 25 (**2026-07-26**): No backup capability exists. No `pg_dump`, no backup/restore script,
+  no tested restore, no RPO/RTO. `deploy/OPS.md:65` defers it ("take volume snapshots / managed DB").
+- Insight 26 (**2026-07-26**): The Mongo 27018 host remap (Insight 4) lived **only** in the
+  gitignored `.env`. `.env.example` ships `MONGO_PORT=27017`, which collides with the co-resident
+  `chat-mongodb`. A naive `cp .env.example .env && docker compose up -d` will fail to bind.
+- Insight 27 (**2026-07-26**): Commit `0c85f9f` has a **corrupt message** — raw `git status` output
+  was captured as the commit message.
 
 ## Files Deeply Reviewed
 - Phase 0–5d surfaces; health ACL; deploy alertmanager/load/HA; board DnD; CI deploy.yml
@@ -63,9 +99,23 @@ Phase 5d HA drill — **complete** (2026-07-20). Score **100/100**. Optional liv
   Rationale: Host RAM ~86%; dependency failover is the reliability claim; api2 LB kill remains optional polish.
 
 ## Next Immediate Steps
-1. Await user decision for optional live prod HA: API base URL + replica access + api2-stop permission + maintenance window.
-2. Until then: no further prod HA work; score remains **100/100** on local Phase 5d evidence.
-3. Follow OPS.md cadence.
+1. **P1 — unblock provisioning.** Add `"esbuild": "0.28.1"` to root `overrides`, delete + regenerate
+   `package-lock.json`, confirm `npm ci` succeeds, commit. (Fix verified in an isolated copy
+   2026-07-26; **not yet applied to the repo — awaiting go-ahead**.)
+2. **P1 — make CI exercise the lockfile.** Replace the three per-workspace `npm install` steps in
+   `deploy.yml` with a single root `npm ci`, so Insight 22 can never regress unseen.
+3. ~~**P1 — restore the mirror invariant.**~~ **Done 2026-07-26.** Catalyst retired by owner
+   decision; `veralogix` + `an3s` remotes configured and both brought to the same SHA. Mirror
+   policy in `AGENTS.md` is now two-way. Verify with `git ls-remote` on both before calling any
+   future push complete.
+4. **P2 — host capacity.** C: at 2.8% free (25.7 GB) is causing VSS/shadow-copy failures and a
+   failed Windows 11 25H2 install (0x800703EE). Free space before starting Docker Desktop.
+5. **P2 — backup.** Author a `pg_dump` + restore procedure with a stated RPO/RTO; add a restore drill
+   to the OPS cadence (Insight 25).
+6. **P3 — document the Mongo remap.** Set/annotate `MONGO_PORT=27018` in `.env.example` (Insight 26).
+7. **P3 — pin Node.** Add `engines.node` matching CI's Node 20; local host runs non-LTS v25.2.1.
+8. Await user decision for optional live prod HA: API base URL + replica access + api2-stop
+   permission + maintenance window.
 
 ## Patterns & Recurring Issues Noticed
 - Pattern: npm workspaces can nest/hoist stale Nest majors after bumps — always `npm ls`, delete lock+node_modules if invalid, verify no `backend/node_modules/@nestjs`.
@@ -86,3 +136,9 @@ Phase 5d HA drill — **complete** (2026-07-20). Score **100/100**. Optional liv
 - [2026-07-20T22:10+02:00] Phase 5c Nest 11: clean lockfile + overrides; build/128 tests/lint/health/auth green; score **99/100**; committed `071c7fc`, merged to main, pushed all remotes.
 - [2026-07-20T22:25+02:00] Phase 5d HA drill: live PG/Redis/Mongo failover; compose config OK; alerts load; Redis replicaof smoke; **100/100**; docs+canvas; committed `27fd445`, pushed all remotes.
 - [2026-07-20T22:27+02:00] Optional live prod HA probe: **blocked**. No FlowLogix public `/health`; no confirmed SSH/kube/docker prod access. Ask-list recorded; no drill, no commit.
+- [2026-07-26T05:30+02:00] Daily readiness sweep on a **fresh 04:27 clone**. Found P1 `npm ci`
+  EBADPLATFORM blocker (Insight 22) and proved the fix in an isolated copy at
+  `d:\_flowlogix-healthcheck` — repo left untouched. Also found CI never runs `npm ci` (23),
+  broken 3-remote mirror incl. catalyst 404 (24), zero backup capability (25), lost Mongo 27018
+  remap (26), corrupt HEAD commit message (27). Docker Desktop stopped; all service ports closed;
+  C: at 2.8% free. Memory + index updated. **No repo fixes applied — awaiting go-ahead.**

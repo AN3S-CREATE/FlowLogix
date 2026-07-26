@@ -9,7 +9,7 @@ imported below so there is a single source of truth shared with Cursor.
 @.cursorrules
 
 Mandatory **operational** rules for AI agents — notably the policy to mirror
-every commit/push to all three FlowLogix remotes — live in **`AGENTS.md`** and
+every commit/push to both FlowLogix remotes — live in **`AGENTS.md`** and
 are imported here so Claude Code and other assistants always load them:
 
 @AGENTS.md
