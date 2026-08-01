@@ -24,6 +24,13 @@ export interface Card {
   assigneeIds: Id[];
   checklist: ChecklistItem[];
   isComplete: boolean;
+  /**
+   * Server-assigned Base62 fractional-index key. Optional because the frontend
+   * never mints keys itself — the backend owns ordering; this is only carried so
+   * a live `card.moved` frame can be placed among keyed siblings. Cards without
+   * one keep their array position until the server assigns a key.
+   */
+  positionIdx?: string;
 }
 
 export interface List {

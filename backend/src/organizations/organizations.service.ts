@@ -1,4 +1,8 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Organization } from './organization.entity';
@@ -32,7 +36,11 @@ export class OrganizationsService {
     return org;
   }
 
-  async update(id: string, orgId: string, dto: UpdateOrganizationDto): Promise<Organization> {
+  async update(
+    id: string,
+    orgId: string,
+    dto: UpdateOrganizationDto,
+  ): Promise<Organization> {
     const org = await this.findOne(id, orgId);
     Object.assign(org, dto);
     return this.organizationsRepo.save(org);

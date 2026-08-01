@@ -14,6 +14,9 @@ Local development datastores (PostgreSQL, MongoDB, Redis) are provisioned via th
 - npm 10+
 - Docker & Docker Compose
 
+For GitHub Actions workflow details, required checks, and local CI reproduction, see
+[`docs/ci.md`](docs/ci.md).
+
 ## Getting started
 
 ### 1. Start the datastores
@@ -28,7 +31,7 @@ This starts:
 | Service    | Purpose                     | Port  |
 |------------|------------------------------|-------|
 | PostgreSQL | Primary relational store     | 5432  |
-| MongoDB    | Primary document store       | 27017 |
+| MongoDB    | Health probe only (no domain collections yet) | 27018 |
 | Redis      | Pub/sub & caching layer      | 6379  |
 
 ### 2. Install dependencies
@@ -47,25 +50,40 @@ npm run migration:run --workspace backend
 npm run dev:backend
 ```
 
-The API starts on `http://localhost:3000`. Every request to a tenant-scoped
-endpoint (organizations, users, boards, and everything nested under a board)
-must include an `X-Org-Id: <uuid>` header identifying the active
-organization — see [`backend/README.md`](backend/README.md#data-model--tenant-isolation)
+The API starts on `http://localhost:3000`. Authenticate with
+`POST /auth/login`, then send `Authorization: Bearer <token>` on every
+request. The active tenant `orgId` comes from the verified JWT
+(`ActiveOrgId`) — never from a client-supplied header. See
+[`backend/README.md`](backend/README.md#data-model--tenant-isolation)
 for how isolation is enforced.
 
 ### 4. Run the frontend
 
 ```bash
+cp frontend/.env.example frontend/.env.local   # sets VITE_API_URL=http://localhost:3000
+npm run seed --workspace backend               # once: demo org/user/boards
 npm run dev:frontend
 ```
 
-The app starts on `http://localhost:5173`.
+The app starts on `http://localhost:5173`. With `VITE_API_URL` set it shows a
+JWT login gate (seeded user `andries@veralogix.co.za` / `Veralogix#2026`), then
+hydrates the board from REST. Omit `VITE_API_URL` to keep the offline demo seed.
+Card moves PATCH `/cards/:id` with neighbor ids so the API mints fractional
+keys; `needsResync` triggers a targeted board refetch instead of a full reload.
+
+### 5. Production compose & observability (optional)
+
+See [`deploy/OPS.md`](deploy/OPS.md) for health/metrics, Prometheus alert rules
+(`deploy/prometheus/alerts.yml`), Grafana provisioning, and
+`docker-compose.prod.yml` HA notes. Local stack stays `docker compose up -d`.
 
 ## Project structure
 
 ```
 FlowLogix/
 ├── docker-compose.yml       # Postgres, MongoDB, Redis for local dev
+├── docker-compose.prod.yml  # Nginx + 3 API replicas + Prometheus/Grafana
+├── deploy/                  # Prometheus/Grafana config + OPS.md runbook
 ├── backend/                 # NestJS API
 │   ├── src/
 │   └── Dockerfile

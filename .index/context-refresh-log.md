@@ -1,0 +1,18 @@
+# Context Refresh Log
+
+| Date | Trigger | Summary |
+|------|---------|---------|
+| 2026-07-20 | Daily system readiness sweep; `.index/` missing | Initialized index from README, compose files, health module, deploy layout. Recorded local stack as not running. |
+| 2026-07-20 | Container cleanup + env bootstrap | Geologix-AI stopped/removed; 19 exited containers removed; `.env`/`backend/.env` created with MONGO 27018. |
+| 2026-07-20 | Part A bootstrap + Phase 0 audit | Compose healthy (PG/Mongo27018/Redis); npm install; 6 migrations; `/health` ok. Phase 0 report + canvas; architecture corrected (JWT tenant, not X-Org-Id). |
+| 2026-07-20 | Phase 1 Quick Wins | HTTP filter + helmet + throttler; JWT docs; CI mobile tests; `/health` ok; 106 backend tests. Audit majors deferred. See `phase1-quick-wins.md`. |
+| 2026-07-20 | Phase 2 Core Hardening | SPA JWT+REST hydrate, neighbor card moves, needsResync refetch; 108 backend / 21 frontend tests; seed+login smoke. See `phase2-core-hardening.md`. |
+| 2026-07-20 | Phase 3 Specialized uplift | Sync `positionIdx` + parent refs LWW; offline UUID inserts; 116 backend / 48 mobile tests. See `phase3-specialized-uplift.md`. |
+| 2026-07-20 | Phase 4 Docs/observability/DevOps | Prometheus alerts + OPS.md; sync→WS after commit; sinceCheckpoint delta-pull; 119 backend tests; Atlaskit + npm majors deferred. See `phase4-docs-observability-devops.md`. |
+| 2026-07-20 | Phase 5 Final validation | Remotes confirmed Phase 4 SHAs; 119/21/48 tests + `/health` ok; final **92/100**; CI frontend Vitest + e2e stub; `phase5-final-readiness.md` + canvas. |
+| 2026-07-20 | Phase 5b Gap closure | Metrics ACL, Alertmanager, Mongo optional, Atlaskit DnD, Vite8/Vitest4, load/HA docs, real CI e2e; Nest11 deferred; **97/100**; `phase5b-gap-closure.md` + canvas. |
+| 2026-07-20 | Phase 5c Nest 11 | Backend Nest 11.1.28 + companions; root overrides; JWT/Express fixes; 128 Jest + build + `/health`/auth smoke; **99/100**; `phase5c-nest11.md`. |
+| 2026-07-20 | Phase 5d HA drill | Live PG/Redis/Mongo failover on Nest 11; prod compose config OK; promtool 6 rules; Redis replicaof smoke; **100/100**; `phase5d-ha-drill.md` + HA-TABLETOP evidence. |
+| 2026-07-20 | Optional live prod HA probe | Searched deploy/env/CI/remotes; read-only DNS/TLS/HTTP probes. **Blocked** — no FlowLogix staging/prod `/health`; no confirmed replica access. No drill, no commit. |
+| 2026-07-26 | Daily readiness sweep (fresh clone) | Working copy re-cloned 04:27 — no deps/`.env`/services. **P1: `npm ci` fails EBADPLATFORM on all platforms** (26 non-optional `@esbuild/*` in lockfile; two esbuild majors via mobile vitest 2 vs frontend vite 8). Fix (`overrides.esbuild=0.28.1`) verified in an isolated copy; repo untouched. Also: CI never runs `npm ci`; 3-remote mirror broken (catalyst 404, veralogix 1 behind); no backup capability; Mongo 27018 remap lost with `.env`; corrupt HEAD commit message. Docker stopped; C: 2.8% free. See `REPO_ANALYSIS_MEMORY.md` Insights 22–27. |
+| 2026-08-01 | GitHub Actions stabilization | Read current workflow + recent failed runs, wrote a diagnosis report, then upgraded CI to run on push/PR/schedule/manual with root `npm ci`, backend/frontend/mobile split jobs, `CI Health`, optional smoke, manual publish toggle, and `docs/ci.md`. Validated with `actionlint`, local `npm run ci:verify`, compose smoke, and Docker image builds in an isolated temp copy. |

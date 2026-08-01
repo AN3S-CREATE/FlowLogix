@@ -15,9 +15,24 @@
     "build:frontend": "npm run build --workspace frontend",
     "lint:backend": "npm run lint --workspace backend",
     "lint:frontend": "npm run lint --workspace frontend",
+    "test:backend": "npm run test --workspace backend -- --ci",
+    "test:frontend": "npm run test --workspace frontend",
     "test:mobile": "npm run test --workspace mobile",
     "typecheck:mobile": "npm run typecheck --workspace mobile",
+    "ci:backend": "npm run lint:backend && npm run test:backend && npm run build:backend",
+    "ci:frontend": "npm run lint:frontend && npm run test:frontend && npm run build:frontend",
+    "ci:mobile": "npm run typecheck:mobile && npm run test:mobile",
+    "ci:verify": "npm run ci:backend && npm run ci:frontend && npm run ci:mobile",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down"
+  },
+  "overrides": {
+    "@nestjs/common": "11.1.28",
+    "@nestjs/core": "11.1.28",
+    "@nestjs/platform-express": "11.1.28",
+    "@nestjs/platform-socket.io": "11.1.28",
+    "@nestjs/websockets": "11.1.28",
+    "@nestjs/testing": "11.1.28",
+    "rxjs": "7.8.2"
   }
 }

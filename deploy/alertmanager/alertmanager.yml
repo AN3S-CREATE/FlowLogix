@@ -1,0 +1,23 @@
+# Alertmanager stub for FlowLogix production compose.
+# Wire real receivers (Slack/PagerDuty/email) by replacing the webhook URL.
+# See deploy/OPS.md § Alertmanager.
+
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: flowlogix-default
+  group_by: [alertname, instance]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+
+receivers:
+  - name: flowlogix-default
+    webhook_configs:
+      # Placeholder — replace with your incident webhook. Until then, alerts
+      # still evaluate in Prometheus UI and appear in Alertmanager's silences/UI.
+      - url: 'http://127.0.0.1:9/flowlogix-alert-webhook-placeholder'
+        send_resolved: true
+
+inhibit_rules: []

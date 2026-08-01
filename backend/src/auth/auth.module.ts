@@ -3,6 +3,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import type { StringValue } from 'ms';
 import { User } from '../users/user.entity';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
@@ -28,10 +29,16 @@ import { JwtAuthGuard } from './jwt-auth.guard';
             'JWT_SECRET must be set to a secure value in production',
           );
         }
+        // jsonwebtoken@9 types `expiresIn` as `number | StringValue` (ms branded
+        // template), not a plain string — cast the env default accordingly.
+        const expiresIn = config.get<string>(
+          'JWT_EXPIRES_IN',
+          '1h',
+        ) as StringValue;
         return {
           secret: secret || 'dev-insecure-secret',
           signOptions: {
-            expiresIn: config.get<string>('JWT_EXPIRES_IN', '1h'),
+            expiresIn,
           },
         };
       },

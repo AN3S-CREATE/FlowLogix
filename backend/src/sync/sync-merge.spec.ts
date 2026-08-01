@@ -99,4 +99,45 @@ describe('mergeServerRecord (field-level LWW)', () => {
     expect(clientAccepted).toBe(false);
     expect(serverAhead).toBe(false);
   });
+
+  it('merges positionIdx like any other LWW field (later clock wins)', () => {
+    const server = state({
+      fields: { title: 'T', positionIdx: 'a1' },
+      clocks: { title: 100, positionIdx: 100 },
+    });
+    const client = state({
+      fields: { title: 'T', positionIdx: 'b1' },
+      clocks: { title: 100, positionIdx: 250 },
+      nodeId: 'client-node',
+    });
+    const { merged, report, serverChanged, clientAccepted } = mergeServerRecord(
+      server,
+      client,
+    );
+    expect(merged.fields.positionIdx).toBe('b1');
+    expect(merged.clocks.positionIdx).toBe(250);
+    expect(report.positionIdx).toBe('client');
+    expect(serverChanged).toBe(true);
+    expect(clientAccepted).toBe(true);
+  });
+
+  it('breaks an exact positionIdx clock tie by greater Base62 key', () => {
+    const server = state({
+      fields: { positionIdx: 'a1' },
+      clocks: { positionIdx: 500 },
+    });
+    const client = state({
+      fields: { positionIdx: 'b1' },
+      clocks: { positionIdx: 500 },
+    });
+    expect(mergeServerRecord(server, client).merged.fields.positionIdx).toBe(
+      'b1',
+    );
+    expect(
+      mergeServerRecord(
+        state({ fields: { positionIdx: 'b1' }, clocks: { positionIdx: 500 } }),
+        state({ fields: { positionIdx: 'a1' }, clocks: { positionIdx: 500 } }),
+      ).merged.fields.positionIdx,
+    ).toBe('b1');
+  });
 });

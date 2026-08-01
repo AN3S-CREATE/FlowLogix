@@ -47,4 +47,39 @@ describe('HealthService', () => {
     expect(report.status).toBe('degraded');
     expect(report.checks.find((c) => c.name === 'redis')?.status).toBe('down');
   });
+
+  it('stays ok when mongo is down but HEALTH_REQUIRE_MONGO=false', async () => {
+    const prev = process.env.HEALTH_REQUIRE_MONGO;
+    process.env.HEALTH_REQUIRE_MONGO = 'false';
+    try {
+      const { service, metrics } = make(
+        up('postgres'),
+        up('redis'),
+        down('mongo'),
+      );
+      const report = await service.check();
+
+      expect(report.status).toBe('ok');
+      expect(report.checks.find((c) => c.name === 'mongo')?.status).toBe(
+        'down',
+      );
+      expect(metrics.recordProbe).toHaveBeenCalledTimes(3);
+    } finally {
+      if (prev === undefined) delete process.env.HEALTH_REQUIRE_MONGO;
+      else process.env.HEALTH_REQUIRE_MONGO = prev;
+    }
+  });
+
+  it('degrades when mongo is down and HEALTH_REQUIRE_MONGO is unset', async () => {
+    const prev = process.env.HEALTH_REQUIRE_MONGO;
+    delete process.env.HEALTH_REQUIRE_MONGO;
+    try {
+      const { service } = make(up('postgres'), up('redis'), down('mongo'));
+      const report = await service.check();
+      expect(report.status).toBe('degraded');
+    } finally {
+      if (prev === undefined) delete process.env.HEALTH_REQUIRE_MONGO;
+      else process.env.HEALTH_REQUIRE_MONGO = prev;
+    }
+  });
 });

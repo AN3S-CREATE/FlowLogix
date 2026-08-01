@@ -39,12 +39,12 @@ Every tenant-scoped table is reachable only through its org: `users` and
 `card_members`, and `comments` are scoped transitively through the
 board/list/card they belong to.
 
-Callers identify the active tenant with an `X-Org-Id: <uuid>` header on every
-request to a tenant-scoped endpoint (`organizations/*`, `users/*`, `boards/*`,
-and everything nested under a board — lists, cards, members, comments). The
-`ActiveOrgId` decorator (`src/common/tenant/active-org-id.decorator.ts`)
-validates and extracts it; a missing or malformed header is rejected with
-`400` before any query runs.
+Callers authenticate with `POST /auth/login` and send
+`Authorization: Bearer <jwt>` on every request. The global `JwtAuthGuard`
+verifies the token and attaches `request.user`; the `ActiveOrgId` decorator
+(`src/common/tenant/active-org-id.decorator.ts`) reads the tenant **only**
+from that principal — never from a client-supplied header (the old
+`X-Org-Id` approach was spoofable and is gone). Missing auth yields `401`.
 
 Isolation is enforced at two layers:
 
@@ -53,8 +53,10 @@ Isolation is enforced at two layers:
    board (`TenantAccessService.assertBoardInOrg` / `assertListInOrg` /
    `assertCardInOrg`), returning `404` rather than leaking existence of a
    resource that belongs to another org.
-2. **Database layer (`boards` only)** — `boards` has Row-Level Security
-   enabled and `FORCE`d:
+2. **Database layer (RLS)** — `boards` is FORCE-RLS'd on `org_id`;
+   `lists` / `cards` / `comments` use chained-membership policies that
+   require the parent row to be visible under its own RLS (so the boards
+   org check propagates down the hierarchy):
 
    ```sql
    CREATE POLICY boards_tenant_isolation ON boards

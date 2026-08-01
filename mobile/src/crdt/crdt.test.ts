@@ -110,7 +110,7 @@ interface CardFields {
   title: string;
   description: string;
   listId: string;
-  positionIdx: number;
+  positionIdx: string;
   [key: string]: unknown;
 }
 
@@ -128,7 +128,7 @@ function card(
       title: 'A',
       description: '',
       listId: 'list-1',
-      positionIdx: 0,
+      positionIdx: 'a1',
       ...over.fields,
     },
     clocks: {
@@ -224,5 +224,36 @@ describe('mergeRecord (field-level LWW)', () => {
     const yx = mergeRecord(y, x).merged.fields.title;
     expect(xy).toBe(yx); // order-independent despite differing nodeIds
     expect(xy).toBe('zzz'); // greater value wins the tie
+  });
+
+  it('merges positionIdx (Base62 string) by later clock, matching server LWW', () => {
+    const local = card({
+      fields: { positionIdx: 'a1' },
+      clocks: { positionIdx: 100 },
+    });
+    const remote = card({
+      fields: { positionIdx: 'b1' },
+      clocks: { positionIdx: 300 },
+      nodeId: 'device-B',
+    });
+    const { merged, report } = mergeRecord(local, remote);
+    expect(merged.fields.positionIdx).toBe('b1');
+    expect(merged.clocks.positionIdx).toBe(300);
+    expect(report.positionIdx).toBe('remote');
+  });
+
+  it('breaks an exact positionIdx clock tie by greater key (converges both ways)', () => {
+    const a = card({
+      fields: { positionIdx: 'a1' },
+      clocks: { positionIdx: 500 },
+      nodeId: 'device-Z',
+    });
+    const b = card({
+      fields: { positionIdx: 'b1' },
+      clocks: { positionIdx: 500 },
+      nodeId: 'device-A',
+    });
+    expect(mergeRecord(a, b).merged.fields.positionIdx).toBe('b1');
+    expect(mergeRecord(b, a).merged.fields.positionIdx).toBe('b1');
   });
 });

@@ -8,6 +8,12 @@ imported below so there is a single source of truth shared with Cursor.
 
 @.cursorrules
 
+Mandatory **operational** rules for AI agents — notably the policy to mirror
+every commit/push to both FlowLogix remotes — live in **`AGENTS.md`** and
+are imported here so Claude Code and other assistants always load them:
+
+@AGENTS.md
+
 ---
 
 ## Implementation status vs. the rules above
@@ -15,7 +21,22 @@ imported below so there is a single source of truth shared with Cursor.
 These rules are the target the workspace is converging on; parts are not built
 yet. Notable gaps between the rules and the current code:
 
+- **Authentication.** Built (JWT). `backend/src/auth/` has `AuthService`
+  (bcrypt credential check + token signing), `POST /auth/login` and `GET
+  /auth/me`, and a global `JwtAuthGuard` (APP_GUARD) that protects every HTTP
+  route unless `@Public()` (login + `/health*`). The guard verifies the bearer
+  token and attaches `request.user`; `ActiveOrgId` now reads the org **from the
+  verified JWT**, not the old spoofable `X-Org-Id` header. Websocket contexts
+  pass through the guard (the gateway keeps its own handshake check). OAuth2/SSO
+  (external IdP) remains future work — this is the local-credential JWT core.
+
+- **HTTP hardening.** Global `HttpExceptionFilter` (`APP_FILTER`) masks unexpected
+  500s and shapes `HttpException` responses. `helmet` sets baseline security
+  headers in `main.ts`. `@nestjs/throttler` rate-limits at 100 req/min per IP
+  globally, with login tightened to 10/min and `/health*` `@SkipThrottle()`'d.
+
 - **RLS session variable.** The boards policy and the runtime helper both use
+
   `app.current_tenant_id`, matching the rules. The name lives in one place —
   the `TENANT_SETTING` constant in
   `backend/src/common/tenant/tenant-transaction.util.ts` — and the SQL policy
@@ -44,20 +65,31 @@ yet. Notable gaps between the rules and the current code:
   Lists/Cards compute an append-to-end key on create (or validate a
   client-supplied key) and validate keys on move. `PositionRebalanceService` is
   a daily `@Cron` that re-spreads any column whose keys exceed 32 chars
-  (precision-bloat guard, §3.3.3). The `/sync` merge still leaves `position_idx`
-  out of scope (content fields only).
+  (precision-bloat guard, §3.3.3). `/sync` merges `positionIdx` (and parent
+  `listId`/`boardId`) under the same field-level LWW as content fields.
 - **Real-time websockets.** Implemented. `backend/src/realtime/` holds the
   Socket.io gateway, the Redis Pub/Sub service, and `BoardEventsService` — the
   service-layer capture point that publishes lightweight `{ cardId, listId,
   positionIdx }` deltas to `board:room:{boardId}` *after* the DB write commits
-  (decoupled per §4). `CardsService`/`ListsService` call it; the gateway
+  (decoupled per §4). `CardsService`/`ListsService` **and** `SyncService` call
+  it (sync emits only after the tenant transaction commits); the gateway
   pattern-subscribes and fans frames out to the matching room, with an org
   ownership check on join and a Redis-backed replay log for reconnect
   delta-sync. The client half is `frontend/src/realtime/boardSocketManager.ts`.
-- **Frontend.** The React SPA is a minimal scaffold; the Zustand
-  optimistic-update, brand palette pieces described in the rules are largely in
-  place (the branded board UI and the socket manager exist; store wiring of live
-  frames is the next step).
+- **Frontend.** The branded React SPA and the Zustand optimistic-update store
+  are in place, and live frames are wired into the store. With `VITE_API_URL`
+  set, `AuthGate` requires JWT login (`POST /auth/login`), hydrates the active
+  board via REST (`frontend/src/api/`), and persists DnD moves with optimistic
+  UI + rollback on non-2xx (`PATCH /cards/:id` with `beforeCardId`/`afterCardId`
+  so the server mints fractional keys — the client never invents them).
+  `needsResync` (content WS frames or sync gaps) triggers `refetchBoard` for a
+  targeted snapshot instead of a hard reload. `App` mounts `useBoardSocket`
+  (`frontend/src/realtime/useBoardSocket.ts`): org comes from the JWT session
+  (fallback `VITE_ORG_ID`); WS URL from `VITE_WS_URL` or `VITE_API_URL`. Without
+  `VITE_API_URL` the board still runs as an offline demo. Pure logic is
+  vitest-tested (`remoteMutations.test.ts`, `mapBoard.test.ts`, `cardDnd.test.ts`).
+  Drag-and-drop uses `@atlaskit/pragmatic-drag-and-drop` (+ hitbox) with optimistic
+  `moveCard` + rollback (Phase 5b).
 - **Mobile offline-first sync.** Implemented in the `mobile/` workspace
   (`mobile/src/`). `crdt/` holds the LWW-CRDT primitives — a strictly-monotonic
   high-precision clock, an LWW register, an LWW-Element-Set, and a field-level
@@ -74,21 +106,44 @@ yet. Notable gaps between the rules and the current code:
   suitable (the `expo-task-manager` / `expo-background-task` surface is an
   injected `BackgroundTaskHost` port). `model/` has the WatermelonDB
   schema/models (per-field `*_updated_at` columns) and the port adapters. Pure
-  logic is unit-tested with vitest (46 tests); the React Native UI and native
+  logic is unit-tested with vitest (48 tests); the React Native UI and native
   SQLite/NetInfo/Expo wiring live behind injectable ports.
 - **Server `/sync` endpoint.** Implemented in `backend/src/sync/`. `sync-merge.ts`
   is the master half of the mobile `mergeRecord` — a pure field-level LWW merge
   (later clock wins; exact ties broken by greater canonical-JSON value, identical
   to the client so both converge; deletion is an LWW tombstone). `SyncService`
   runs it per record inside a tenant transaction, and `SyncController` exposes
-  `POST /sync` (tenant from the `X-Org-Id` header). The master carries per-record
+  `POST /sync` (tenant from the authenticated JWT). The master carries per-record
   CRDT metadata via the `AddSyncClocks` migration — additive `sync_clocks` (jsonb
   `<field>→epoch-µs`), `node_id`, and `sync_deleted_at` columns on
   `boards`/`lists`/`cards`, mapped on the entities (`bigintToNumber` transformer).
-  Jest-tested (mocked DataSource). **v1 scope:** merges *content* fields
-  (`title`/`description`/`isComplete`) of existing records; `position_idx` and
-  parent-move sync wait on the `FractionalIndexer` column migration, and
-  first-time inserts of offline-created records still go through the CRUD routes.
+  Jest-tested (mocked DataSource). **v2 / Phase 3–4:** merges content fields
+  plus `positionIdx` and parent refs (`listId`/`boardId`); validates Base62 keys
+  via `PositionService`; accepts first-time inserts of offline-created UUID rows
+  when the parent is in-org (RLS tenant context); when `sinceCheckpoint > 0`,
+  delta-pulls org-scoped rows whose clocks/tombstones exceed the checkpoint;
+  list/card writes publish board realtime events after commit. Older clients
+  that omit structural fields keep content-only merge behaviour.
+- **Observability / ops (Phase 4–5b).** Prometheus scrapes `/health/metrics` with
+  Bearer `METRICS_SECRET`; Alertmanager wired from Prometheus (placeholder
+  webhook); alert rules in `deploy/prometheus/alerts.yml`. Ops: `deploy/OPS.md`,
+  HA tabletop `deploy/HA-TABLETOP.md`, load smoke `deploy/load/`. Vite 8 / Vitest 4
+  shipped; **Nest 11** shipped in Phase 5c (root `overrides` + clean lockfile).
+- **Phase 5 final readiness (2026-07-20).** Locked **92/100** — see
+  `phase5-final-readiness.md`.
+- **Phase 5b gap closure (2026-07-20).** Closed metrics ACL, Alertmanager, optional
+  Mongo health, Atlaskit DnD, CI compose health e2e, load suite, HA tabletop,
+  Vite 8/Vitest 4. Suites: **128** Jest / **23** frontend Vitest / **48** mobile.
+  Score **97/100** — see `phase5b-gap-closure.md`.
+- **Phase 5c Nest 11 (2026-07-20).** Backend on Nest **11.1.28** (+ config 4 /
+  jwt 11 / typeorm 11 / schedule 6 / throttler 6). Express v5 query parser set to
+  `extended`; JWT `expiresIn` typed as `ms.StringValue`. Score **99/100** — see
+  `phase5c-nest11.md`.
+- **Phase 5d HA drill (2026-07-20).** Live postgres/redis/mongo stop→`/health`
+  503→recover 200 on Nest 11 + local compose; prod compose config OK; promtool
+  6 rules + Alertmanager config SUCCESS; isolated Redis replicaof smoke. Full
+  3-API prod stack skipped (host RAM). Score **100/100** — see
+  `phase5d-ha-drill.md` + `deploy/HA-TABLETOP.md`.
 
 When you implement any of the above, follow `.cursorrules` and update this
 status list.

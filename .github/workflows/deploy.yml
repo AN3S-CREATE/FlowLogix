@@ -1,76 +1,315 @@
-name: Build & Deploy
+# CI verifies all workspaces on pushes, PRs, manual runs, and a weekly schedule; it can also run an e2e smoke test and publish container images from the default branch.
+name: CI & Publish
 
-# Production CI/CD: on every merge to main, verify the backend + frontend, then
-# build and push the production container images to the GitHub Container Registry.
 on:
   push:
-    branches: [main]
-  workflow_dispatch: {}
+    branches:
+      - '**'
+  pull_request:
+    branches:
+      - main
+  schedule:
+    - cron: '17 4 * * 1'
+  workflow_dispatch:
+    inputs:
+      run_e2e:
+        description: 'Run compose health smoke after required CI jobs pass'
+        type: boolean
+        default: false
+      publish_images:
+        description: 'Publish backend and frontend images after required CI jobs pass'
+        type: boolean
+        default: false
 
 concurrency:
-  group: deploy-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 env:
+  NODE_VERSION: '20'
   REGISTRY: ghcr.io
-  IMAGE_NAMESPACE: ${{ github.repository }} # e.g. veralogix-group-innovation/flowlogix
+  IMAGE_NAMESPACE: ${{ github.repository }}
+
+defaults:
+  run:
+    shell: bash
 
 jobs:
-  # ---------------------------------------------------------------------------
-  # 1) Lint + test both workspaces. Nothing is built or pushed unless this passes.
-  # ---------------------------------------------------------------------------
-  verify:
-    name: Lint & test
+  backend:
+    name: Backend checks
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Node
+      - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: ${{ env.NODE_VERSION }}
           cache: npm
+          cache-dependency-path: package-lock.json
 
-      # --- Backend (NestJS) ---
-      - name: Install backend deps
-        working-directory: backend
-        run: npm install
+      - name: Install dependencies
+        run: npm ci
 
       - name: Lint backend
-        working-directory: backend
-        run: npm run lint
+        run: npm run lint --workspace backend
 
-      - name: Test backend (Jest)
-        working-directory: backend
-        run: npm test -- --ci
+      - name: Test backend
+        run: npm run test --workspace backend -- --ci
 
-      # --- Frontend (Vite/React) ---
-      - name: Install frontend deps
-        working-directory: frontend
-        run: npm install
+      - name: Build backend
+        run: npm run build --workspace backend
+
+      - name: Summarize backend checks
+        if: always()
+        run: |
+          {
+            echo "## Backend checks"
+            echo "- Result: ${{ job.status }}"
+            echo "- Lint, tests, and build ran on Node ${NODE_VERSION}."
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [[ "${{ job.status }}" == "success" ]]; then
+            echo "::notice::Backend checks passed."
+          else
+            echo "::warning::Backend checks failed."
+          fi
+
+  frontend:
+    name: Frontend checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
 
       - name: Lint frontend
-        working-directory: frontend
-        run: npm run lint
+        run: npm run lint --workspace frontend
 
-      - name: Build frontend (type-check + bundle)
-        working-directory: frontend
-        run: npm run build
+      - name: Test frontend
+        run: npm run test --workspace frontend
 
-  # ---------------------------------------------------------------------------
-  # 2) Build the production images and push them to GHCR. Only runs on a real
-  #    merge to main (not on manual re-verify), and only after `verify` is green.
-  # ---------------------------------------------------------------------------
-  build-and-push:
-    name: Build & push images
-    needs: verify
+      - name: Build frontend
+        run: npm run build --workspace frontend
+
+      - name: Summarize frontend checks
+        if: always()
+        run: |
+          {
+            echo "## Frontend checks"
+            echo "- Result: ${{ job.status }}"
+            echo "- Lint, tests, and production build ran on Node ${NODE_VERSION}."
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [[ "${{ job.status }}" == "success" ]]; then
+            echo "::notice::Frontend checks passed."
+          else
+            echo "::warning::Frontend checks failed."
+          fi
+
+  mobile:
+    name: Mobile checks
     runs-on: ubuntu-latest
-    if: github.event_name == 'push'
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type-check mobile
+        run: npm run typecheck --workspace mobile
+
+      - name: Test mobile
+        run: npm run test --workspace mobile
+
+      - name: Summarize mobile checks
+        if: always()
+        run: |
+          {
+            echo "## Mobile checks"
+            echo "- Result: ${{ job.status }}"
+            echo "- Type-check and Vitest suite ran on Node ${NODE_VERSION}."
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [[ "${{ job.status }}" == "success" ]]; then
+            echo "::notice::Mobile checks passed."
+          else
+            echo "::warning::Mobile checks failed."
+          fi
+
+  ci-health:
+    name: CI Health
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs:
+      - backend
+      - frontend
+      - mobile
+    if: always()
+    steps:
+      - name: Summarize required checks
+        run: |
+          {
+            echo "## CI Health"
+            echo ""
+            echo "| Job | Result |"
+            echo "| --- | --- |"
+            echo "| Backend checks | ${{ needs.backend.result }} |"
+            echo "| Frontend checks | ${{ needs.frontend.result }} |"
+            echo "| Mobile checks | ${{ needs.mobile.result }} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [[ "${{ needs.backend.result }}" != "success" || "${{ needs.frontend.result }}" != "success" || "${{ needs.mobile.result }}" != "success" ]]; then
+            echo "::error::One or more required CI jobs failed."
+            exit 1
+          fi
+
+          echo "::notice::All required CI jobs passed."
+
+  e2e-smoke:
+    name: E2E smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: ci-health
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.run_e2e == true)
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate prod compose file
+        run: |
+          cat > .env.prod.ci <<'EOF'
+          REGISTRY=ghcr.io
+          IMAGE_NAMESPACE=ci/flowlogix
+          IMAGE_TAG=ci
+          TLS_CERT_DIR=./deploy/certs
+          CORS_ORIGIN=http://localhost
+          LOG_LEVEL=info
+          POSTGRES_USER=logixflow
+          POSTGRES_PASSWORD=ci-postgres
+          POSTGRES_DB=logixflow
+          APP_DB_USER=logixflow_app
+          APP_DB_PASSWORD=ci-app
+          MONGO_USER=logixflow
+          MONGO_PASSWORD=ci-mongo
+          REDIS_PASSWORD=ci-redis
+          GRAFANA_ADMIN_PASSWORD=ci-grafana
+          JWT_SECRET=ci-jwt-secret-at-least-32-chars-long
+          METRICS_SECRET=ci-metrics-secret-at-least-32-chars
+          HEALTH_REQUIRE_MONGO=true
+          EOF
+
+          docker compose -f docker-compose.prod.yml --env-file .env.prod.ci config --quiet
+          echo "::notice::docker-compose.prod.yml validation passed."
+
+      - name: Start local datastores
+        run: docker compose up -d postgres redis mongodb
+
+      - name: Wait for datastore health
+        run: |
+          for attempt in $(seq 1 30); do
+            pg=$(docker inspect -f '{{.State.Health.Status}}' logixflow-postgres 2>/dev/null || echo starting)
+            redis=$(docker inspect -f '{{.State.Health.Status}}' logixflow-redis 2>/dev/null || echo starting)
+            mongo=$(docker inspect -f '{{.State.Health.Status}}' logixflow-mongodb 2>/dev/null || echo starting)
+            echo "attempt=${attempt} postgres=${pg} redis=${redis} mongo=${mongo}"
+            if [[ "${pg}" == "healthy" && "${redis}" == "healthy" && "${mongo}" == "healthy" ]]; then
+              exit 0
+            fi
+            sleep 2
+          done
+
+          echo "::error::Datastores did not become healthy in time."
+          docker compose ps
+          exit 1
+
+      - name: Build backend
+        run: npm run build --workspace backend
+
+      - name: Start API and verify /health
+        env:
+          NODE_ENV: development
+          PORT: '3000'
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: '5432'
+          POSTGRES_USER: logixflow
+          POSTGRES_PASSWORD: logixflow
+          POSTGRES_DB: logixflow
+          APP_DB_USER: logixflow
+          APP_DB_PASSWORD: logixflow
+          REDIS_HOST: localhost
+          REDIS_PORT: '6379'
+          MONGO_URI: mongodb://logixflow:logixflow@localhost:27017/?authSource=admin
+          JWT_SECRET: ci-e2e-jwt-secret-at-least-32-chars
+          HEALTH_REQUIRE_MONGO: 'true'
+        run: |
+          node backend/dist/main &
+          api_pid=$!
+          trap 'kill "${api_pid}" 2>/dev/null || true' EXIT
+
+          for attempt in $(seq 1 40); do
+            echo "attempt=${attempt} checking /health"
+            if curl -sf http://127.0.0.1:3000/health | tee /tmp/flowlogix-health.json | grep -q '"status":"ok"'; then
+              echo "::notice::Health endpoint returned ok."
+              {
+                echo "## E2E smoke"
+                echo "- /health returned ok."
+                echo "- Datastores came up healthy."
+              } >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            sleep 2
+          done
+
+          echo "::error::API /health did not become healthy."
+          curl -sv http://127.0.0.1:3000/health || true
+          exit 1
+
+      - name: Tear down datastores
+        if: always()
+        run: docker compose down -v
+
+  build-and-push:
+    name: Publish ${{ matrix.name }} image
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    needs: ci-health
+    if: (github.event_name == 'push' && github.ref_name == github.event.repository.default_branch) || (github.event_name == 'workflow_dispatch' && inputs.publish_images == true)
     permissions:
       contents: read
-      packages: write # required to push to GHCR with the built-in GITHUB_TOKEN
+      packages: write
     strategy:
+      fail-fast: false
       matrix:
         include:
           - name: backend
@@ -91,7 +330,7 @@ jobs:
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }} # scoped, short-lived; no PAT needed
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Derive image metadata
         id: meta
@@ -110,5 +349,17 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=publish-${{ matrix.name }}
+          cache-to: type=gha,scope=publish-${{ matrix.name }},mode=max
+
+      - name: Summarize published image
+        run: |
+          {
+            echo "## Published image"
+            echo "- Image: \`${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}-${{ matrix.name }}\`"
+            echo "- Tags:"
+            echo '```'
+            echo "${{ steps.meta.outputs.tags }}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::notice::Published ${{ matrix.name }} image."

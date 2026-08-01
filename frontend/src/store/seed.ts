@@ -17,6 +17,7 @@ export const seedBoard: BoardSummary = {
 export const seedCards: Record<string, Card> = {
   c1: {
     id: 'c1',
+    positionIdx: 'a0',
     title: 'Design multi-region websocket topology',
     priority: 'high',
     assigneeIds: ['u2', 'u3'],
@@ -29,6 +30,7 @@ export const seedCards: Record<string, Card> = {
   },
   c2: {
     id: 'c2',
+    positionIdx: 'a0',
     title: 'Fractional index migration for cards',
     priority: 'medium',
     assigneeIds: ['u1'],
@@ -40,6 +42,7 @@ export const seedCards: Record<string, Card> = {
   },
   c3: {
     id: 'c3',
+    positionIdx: 'a1',
     title: 'RLS policy for lists & cards',
     priority: 'high',
     assigneeIds: ['u1', 'u4'],
@@ -48,6 +51,7 @@ export const seedCards: Record<string, Card> = {
   },
   c4: {
     id: 'c4',
+    positionIdx: 'a0',
     title: 'Branded avatar component',
     priority: 'low',
     assigneeIds: ['u4'],
@@ -59,6 +63,7 @@ export const seedCards: Record<string, Card> = {
   },
   c5: {
     id: 'c5',
+    positionIdx: 'a1',
     title: 'Optimistic drag-and-drop store',
     priority: 'medium',
     assigneeIds: ['u3', 'u5'],
@@ -71,6 +76,7 @@ export const seedCards: Record<string, Card> = {
   },
   c6: {
     id: 'c6',
+    positionIdx: 'a0',
     title: 'Corporate palette audit',
     priority: 'low',
     assigneeIds: ['u2'],

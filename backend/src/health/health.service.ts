@@ -1,12 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import { MongoProbe, PostgresProbe, RedisProbe } from './health.probes';
 import { MetricsService } from './metrics.service';
-import { HealthReport } from './health.types';
+import { HealthReport, ProbeResult } from './health.types';
+import { isMongoRequiredForHealth } from './health-mongo.util';
 
 /**
  * Runs the Postgres / Redis / MongoDB probes in parallel, folds each result
  * into the Prometheus gauges, and returns a structured report. Overall status
- * is `ok` only when every dependency is up, else `degraded`.
+ * is `ok` only when every *required* dependency is up, else `degraded`.
+ *
+ * Mongo is optional when `HEALTH_REQUIRE_MONGO=false` (still probed + recorded).
  */
 @Injectable()
 export class HealthService {
@@ -25,7 +28,14 @@ export class HealthService {
     ]);
     for (const result of checks) this.metrics.recordProbe(result);
 
-    const status = checks.every((c) => c.status === 'up') ? 'ok' : 'degraded';
+    const requireMongo = isMongoRequiredForHealth();
+    const gated = checks.filter((c) => this.isRequiredProbe(c, requireMongo));
+    const status = gated.every((c) => c.status === 'up') ? 'ok' : 'degraded';
     return { status, timestamp: new Date().toISOString(), checks };
+  }
+
+  private isRequiredProbe(result: ProbeResult, requireMongo: boolean): boolean {
+    if (result.name === 'mongo') return requireMongo;
+    return true;
   }
 }
