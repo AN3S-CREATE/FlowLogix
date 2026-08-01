@@ -24,7 +24,8 @@
 | `deploy/HA-TABLETOP.md` | HA tabletop checklist + Phase 5d live evidence | Active |
 | `deploy/load/` | Load/SLO smoke (Node + optional k6) | Active |
 | `deploy/certs/` | TLS certs mount target | Missing (expected empty until provisioned) |
-| `.github/workflows/deploy.yml` | CI verify + compose health e2e (workflow_dispatch) + GHCR push | Active |
+| `.github/workflows/deploy.yml` | Unified CI + publish workflow: push/PR/manual/schedule verification, CI Health gate, optional smoke, GHCR publish on main/manual | Active |
+| `docs/ci.md` | CI workflow guide: required checks, local reproduction, reruns, troubleshooting | Active |
 | `REPO_ANALYSIS_MEMORY.md` | Cross-session agent memory | Active |
 | `.index/` | Agent context index | Active |
 | `.index/module-summaries/phase0-readiness.md` | Phase 0 readiness audit deliverable (60/100) | Active |

@@ -12,6 +12,7 @@ Collaborative multi-tenant Kanban platform (NestJS API + React SPA + RN offline 
 | Local data | `docker-compose.yml` | Postgres :5432, MongoDB :27018 (host remap), Redis :6379 |
 | Prod stack | `docker-compose.prod.yml` | Nginx TLS, 3 API replicas, Redis master/replica, Prometheus, Grafana |
 | Observability | `deploy/` | Prometheus scrape + alert rules + Grafana dashboard provisioning; `OPS.md` runbook |
+| CI/CD | `.github/workflows/deploy.yml`, `docs/ci.md` | PR-safe GitHub Actions verification, CI Health gate, scheduled/manual compose smoke, GHCR image publishing |
 
 ## Data / isolation
 

@@ -1,7 +1,7 @@
 # Repository Analysis State — FlowLogix / LogixFlow
 
 ## Current Analysis Phase & Progress
-Phase 5d HA drill — **complete** (2026-07-20). Code readiness score **100/100**.
+Phase 6 — **GitHub Actions stabilization in progress** (2026-08-01). Diagnosis completed, CI/workflow/docs fixes applied locally, and local validation is green in an isolated temp copy. Remote GitHub validation still requires a commit/push from this checkout.
 Optional live **prod** HA (`api2` behind LB) — **blocked on credentials / no reachable FlowLogix endpoint** (probed 2026-07-20). No fabricated drill.
 
 **2026-07-26 daily readiness sweep — operational readiness is NOT 100/100.** The 100/100 was a
@@ -61,6 +61,16 @@ see Insight 22. Do **not** quote 100/100 as today's operational state.
   `chat-mongodb`. A naive `cp .env.example .env && docker compose up -d` will fail to bind.
 - Insight 27 (**2026-07-26**): Commit `0c85f9f` has a **corrupt message** — raw `git status` output
   was captured as the commit message.
+- Insight 28 (**2026-08-01**): Current `main` is not broken in CI; clean isolated repro passed root
+  `npm ci`, backend lint/tests/build, frontend lint/tests/build, mobile type-check/tests, compose
+  smoke, and both Docker image builds. The active problem is workflow design, not a failing HEAD.
+- Insight 29 (**2026-08-01**): Historical failed runs on `main` come from three already-resolved
+  root causes: missing root lockfile for `setup-node` cache, unsupported `vitest --ci` in mobile,
+  and a temporary backend lint regression (`_listId` unused). Those failures remain visible in
+  GitHub history even after the code is fixed.
+- Insight 30 (**2026-08-01**): The repo had only one workflow and it was **not PR-safe**: no
+  `pull_request` trigger, per-workspace `npm install` instead of root `npm ci`, no dedicated
+  required-check aggregator, and no focused CI documentation.
 
 ## Files Deeply Reviewed
 - Phase 0–5d surfaces; health ACL; deploy alertmanager/load/HA; board DnD; CI deploy.yml
@@ -69,6 +79,10 @@ see Insight 22. Do **not** quote 100/100 as today's operational state.
 - `.index/module-summaries/phase5d-ha-drill.md`
 - `deploy/HA-TABLETOP.md` (live evidence filled)
 - Canvas: `phase5d-ha-drill.canvas.tsx`
+- `.github/workflows/deploy.yml`
+- `package.json`
+- `docs/ci.md`
+- `README.md`
 
 ## Open Questions & Areas Needing Investigation
 - Q1: **BLOCKED on credentials (2026-07-20)** — optional live prod HA (`api2` kill behind LB). No FlowLogix staging/prod API URL reachable; example `app.veralogix.co.za` does not resolve; `api.veralogix.co.za` is Apache 404 on `/health` (not Nest). Local `.env.prod` is localhost stub. Docker Desktop local only; empty kube; SSH aliases `VeraCore`/`TV-Box` exist but are **not** confirmed FlowLogix ops paths — do not use without user OK.
@@ -97,13 +111,16 @@ see Insight 22. Do **not** quote 100/100 as today's operational state.
   Rationale: Matches `.cursorrules`.
 - Decision: Award 100 without full 3-API prod compose bring-up.
   Rationale: Host RAM ~86%; dependency failover is the reliability claim; api2 LB kill remains optional polish.
+- Decision: Keep one workflow file but split it into backend/frontend/mobile/CI-health/smoke/publish jobs.
+  Rationale: Clear required checks without unnecessary workflow sprawl.
+- Decision: Switch GitHub Actions installs to root `npm ci`.
+  Rationale: Forces lockfile validation and improves reproducibility/caching.
 
 ## Next Immediate Steps
-1. **P1 — unblock provisioning.** Add `"esbuild": "0.28.1"` to root `overrides`, delete + regenerate
-   `package-lock.json`, confirm `npm ci` succeeds, commit. (Fix verified in an isolated copy
-   2026-07-26; **not yet applied to the repo — awaiting go-ahead**.)
-2. **P1 — make CI exercise the lockfile.** Replace the three per-workspace `npm install` steps in
-   `deploy.yml` with a single root `npm ci`, so Insight 22 can never regress unseen.
+1. **P1 — remote validation.** Commit/push the CI changes, then confirm new `CI & Publish` runs are
+   green on push and on a PR-equivalent branch.
+2. **P1 — unblock provisioning.** Re-check whether Insight 22 still reproduces against the current
+   lockfile on a fresh clone; if it does, apply the proven `esbuild` dedupe fix in the repo.
 3. ~~**P1 — restore the mirror invariant.**~~ **Done 2026-07-26.** Catalyst retired by owner
    decision; `veralogix` + `an3s` remotes configured and both brought to the same SHA. Mirror
    policy in `AGENTS.md` is now two-way. Verify with `git ls-remote` on both before calling any
@@ -143,3 +160,8 @@ see Insight 22. Do **not** quote 100/100 as today's operational state.
   broken 3-remote mirror incl. catalyst 404 (24), zero backup capability (25), lost Mongo 27018
   remap (26), corrupt HEAD commit message (27). Docker Desktop stopped; all service ports closed;
   C: at 2.8% free. Memory + index updated. **No repo fixes applied — awaiting go-ahead.**
+- [2026-08-01T11:20+02:00] Phase 6 CI stabilization: wrote a failure diagnosis report, updated
+  `.github/workflows/deploy.yml` for push/PR/schedule/manual CI with `CI Health`, added `docs/ci.md`,
+  added root `ci:*` scripts, and updated index files. Validated with `actionlint`, local
+  `npm run ci:verify`, compose smoke, and Docker image builds in an isolated temp copy. Remote
+  GitHub confirmation still pending because no commit/push has been requested in this session.
