@@ -1,7 +1,7 @@
 # Key Decisions
 
 | Date | Decision | Rationale |
-|------|----------|-----------|
+| ------ | ---------- | ----------- |
 | 2026-07-20 | Daily readiness sweep treats this host as local/dev, not remote prod | No prod URL/credentials in env; compose.prod not running |
 | 2026-07-20 | Do not auto-start FlowLogix compose during readiness check | ~90% host RAM; port 27017 conflict with `chat-mongodb` |
 | 2026-07-20 | Remap local FlowLogix Mongo to host port 27018 | Preserve active `chat-mongodb` on 27017 |
@@ -12,6 +12,7 @@
 | 2026-07-20 | Leave local compose running after bootstrap; stop Nest after `/health` smoke | Datastores needed for next work; Nest freed host RAM |
 | 2026-07-20 | Phase 1 = docs + HTTP filter/helmet/throttle + CI mobile; defer SPA REST & audit majors | User "Apply recommended" → Quick Wins; `--force` majors too risky |
 | 2026-07-20 | Phase 1 committed + mirrored to all three remotes (`bf50683`) | User explicitly requested commit+push |
+| 2026-08-01 | Primary = AN3S-CREATE; mirrors = veralogix-group-innovation + AN3S-at-CREATE; drop VeralogixCatalyst | User updated mirror set; AGENTS.md is source of truth |
 | 2026-07-20 | Phase 2 = SPA JWT/REST hydrate + needsResync refetch; server mints move keys from neighbors | P1+P5; frontend never invents `positionIdx` |
 | 2026-07-20 | SPA API mode opt-in via `VITE_API_URL` (demo seed otherwise) | Preserve offline demo without backend |
 | 2026-07-20 | Phase 3 = sync `positionIdx`/parents + offline inserts; drop invalid keys with clocks | P7; fail-closed multi-tenant; v1 content-only clients compatible |

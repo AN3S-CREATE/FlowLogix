@@ -1,7 +1,7 @@
 # Context Refresh Log
 
 | Date | Trigger | Summary |
-|------|---------|---------|
+| ------ | --------- | --------- |
 | 2026-07-20 | Daily system readiness sweep; `.index/` missing | Initialized index from README, compose files, health module, deploy layout. Recorded local stack as not running. |
 | 2026-07-20 | Container cleanup + env bootstrap | Geologix-AI stopped/removed; 19 exited containers removed; `.env`/`backend/.env` created with MONGO 27018. |
 | 2026-07-20 | Part A bootstrap + Phase 0 audit | Compose healthy (PG/Mongo27018/Redis); npm install; 6 migrations; `/health` ok. Phase 0 report + canvas; architecture corrected (JWT tenant, not X-Org-Id). |
@@ -16,3 +16,4 @@
 | 2026-07-20 | Optional live prod HA probe | Searched deploy/env/CI/remotes; read-only DNS/TLS/HTTP probes. **Blocked** — no FlowLogix staging/prod `/health`; no confirmed replica access. No drill, no commit. |
 | 2026-07-22 | Part A + Enhanced Phase 0 | Compose already healthy (MONGO 27018); `/health` 200; 128/23/48 tests PASS; npm audit 0; NEST still blocked (no SSH retry). Fresh baseline **86/100** in `phase0-readiness-2026-07-22.md` + canvas. STOP for user scope confirmation. |
 | 2026-07-22 | Phase 0 reconfirm (same prompt, no answers) | Spot-check: git still Phase 5d era; compose ~45h healthy; `/health` 200; 128/23/48 PASS; NEST SSH closed. Score **unchanged 86/100**; reconfirmation addendum + canvas stamp. Awaiting Decision Required answers; no Phase 1. |
+| 2026-08-01 | Mirror remotes updated | Primary = AN3S-CREATE; mirrors = veralogix-group-innovation + AN3S-at-CREATE; removed VeralogixCatalyst from AGENTS.md + index docs. |

@@ -11,11 +11,10 @@
 Verified before Phase 5 work. Local `HEAD` was `bfc5d41` (records Phase 4 `a1f30c0`).
 
 | Remote | URL | `a1f30c0` on `main` | `bfc5d41` on `main` |
-|--------|-----|---------------------|---------------------|
-| origin | https://github.com/AN3S-CREATE/FlowLogix.git | Yes (ancestor of `bfc5d41`) | Yes (= tip) |
-| an3s | https://github.com/AN3S-CREATE/FlowLogix.git | Yes | Yes |
-| veralogix | https://github.com/veralogix-group-innovation/FlowLogix.git | Yes | Yes |
-| catalyst | https://github.com/VeralogixCatalyst/FlowLogix.git | Yes | Yes |
+| -------- | ----- | --------------------- | --------------------- |
+| origin / an3s (primary) | <https://github.com/AN3S-CREATE/FlowLogix.git> | Yes (ancestor of `bfc5d41`) | Yes (= tip) |
+| veralogix (mirror) | <https://github.com/veralogix-group-innovation/FlowLogix.git> | Yes | Yes |
+| an3s-at (mirror) | <https://github.com/AN3S-at-CREATE/FlowLogix.git> | Mirror set updated 2026-08-01 — see AGENTS.md | See AGENTS.md |
 
 No catch-up push required for Phase 4.
 
@@ -34,7 +33,7 @@ Phases 0–4 closed the prioritized readiness gaps (HTTP hardening, SPA JWT/REST
 Same 100-point rubric as Phase 0 (`.index/module-summaries/phase0-readiness.md` §3).
 
 | Category | Max | Phase 0 | Phase 5 | Evidence for Phase 5 score |
-|----------|----:|--------:|--------:|----------------------------|
+| ---------- | ----: | --------: | --------: | ---------------------------- |
 | Architecture | 10 | 7 | **9** | Tenant JWT+RLS, DB→Redis→WS, sync v2 + delta-pull + post-commit events. −1: Mongo still required for health `ok` despite probe-only domain use. |
 | Code Quality | 10 | 7 | **8** | Strict TS, ValidationPipe, global `HttpExceptionFilter`. −2: DnD still `@hello-pangea/dnd` vs `.cursorrules` Atlaskit. |
 | Security | 15 | 8 | **12** | JWT guard, org from token, helmet, throttler, FORCE RLS. −3: npm critical/high blocked on Nest11/Vite8; `/health/metrics` `@Public()`. |
@@ -50,7 +49,7 @@ Same 100-point rubric as Phase 0 (`.index/module-summaries/phase0-readiness.md` 
 ### Score trajectory
 
 | Milestone | SHA (approx.) | Est. / final |
-|-----------|---------------|-------------:|
+| ----------- | --------------- | -------------: |
 | Phase 0 baseline | — | **60** |
 | Phase 1 Quick Wins | `bf50683` | ~68–70 |
 | Phase 2 Core Hardening | `a000402` | ~76–80 |
@@ -63,7 +62,7 @@ Same 100-point rubric as Phase 0 (`.index/module-summaries/phase0-readiness.md` 
 ## 3. Summary of changes (Phases 1–4)
 
 | Phase | SHA | What landed |
-|-------|-----|-------------|
+| ------- | ----- | ------------- |
 | **1** | `bf50683` | `HttpExceptionFilter`, helmet, throttler; JWT docs; mobile CI; Mongo port docs |
 | **2** | `a000402` | SPA JWT login + REST hydrate; neighbor card moves; `needsResync` → `refetchBoard`; optimistic rollback |
 | **3** | `4fb971d` | `/sync` LWW for `positionIdx` + parents; offline UUID inserts; Base62 validation |
@@ -76,7 +75,7 @@ Same 100-point rubric as Phase 0 (`.index/module-summaries/phase0-readiness.md` 
 ## 4. Validation suite (Phase 5 re-run)
 
 | Check | Result | Evidence |
-|-------|--------|----------|
+| ------- | -------- | ---------- |
 | Backend Jest | **PASS** | 18 suites / 119 tests |
 | Frontend Vitest | **PASS** | 3 files / 21 tests (incl. moveCard rollback) |
 | Frontend build | **PASS** | `tsc -b && vite build` |
@@ -93,7 +92,7 @@ No Phase 1–4 regressions found; no blocker fixes required.
 ## 5. Failure scenarios (code-path + smoke)
 
 | Scenario | Expected behaviour | Validation |
-|----------|-------------------|------------|
+| ---------- | ------------------- | ------------ |
 | **DB / dependency down** | Probe `down` → report `status: degraded` → HTTP **503** | `health.service.spec.ts` (degraded when any probe down); `health.controller` returns 503 when not `ok`. Live smoke: all up → 200. |
 | **Auth failure** | Invalid credentials / missing JWT → **401** | Live: wrong password 401; unauthenticated `/boards` 401. `JwtAuthGuard` + `AuthService` specs. |
 | **Optimistic UI rollback** | Non-2xx `persistCardMove` restores prior list + server key; concurrent peers not clobbered | `useBoardStore.test.ts` (4 rollback cases); `persistence.ts` API mode PATCH. |
@@ -106,7 +105,7 @@ No Phase 1–4 regressions found; no blocker fixes required.
 ## 6. Why not 100/100
 
 | Gap | Approx. points left | Notes |
-|-----|--------------------:|-------|
+| ----- | --------------------: | ------- |
 | Atlaskit pragmatic DnD | ~2 (CQ + Domain) | Still `@hello-pangea/dnd` |
 | Nest 11 / Vite 8 / Vitest 4 | ~2–3 (Security) | Do not `--force` on main |
 | Live prod HA drill | ~1 (Reliability / Docs) | compose.prod design only |
@@ -138,7 +137,7 @@ Closing these without breaking majors / inventing staging would still leave oper
 See also `deploy/OPS.md` § Suggested health-check cadence.
 
 | Cadence | Action |
-|---------|--------|
+| --------- | -------- |
 | Continuous | Prometheus scrape + `alerts.yml` |
 | Every `main` push | CI verify (backend Jest, frontend Vitest+build, mobile Vitest) |
 | Daily | `GET /health` per replica; glance Alerts |
@@ -160,7 +159,7 @@ See also `deploy/OPS.md` § Suggested health-check cadence.
 ## 10. Sign-off
 
 | Item | Status |
-|------|--------|
+| ------ | -------- |
 | Phase 4 mirrored to all remotes | Confirmed |
 | Validation suite | Green |
 | Final score | **92/100** |

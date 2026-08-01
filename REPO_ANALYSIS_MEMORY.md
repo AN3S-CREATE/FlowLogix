@@ -1,9 +1,11 @@
 # Repository Analysis State — FlowLogix / LogixFlow
 
 ## Current Analysis Phase & Progress
+
 Enhanced Production Readiness Audit — **Phase 0 complete** (2026-07-22). Fresh baseline **86/100**. **STOP** — awaiting user scope confirmation before Phase 1+. Prior Phase 5d **100/100** retained as uplift-history claim (local), not as Enhanced baseline.
 
 ## Key Architectural Insights Discovered
+
 - Insight 1: Local datastores via `docker-compose.yml` (Postgres 5432, Mongo 27018 remapped, Redis 6379); all three healthy after bootstrap.
 - Insight 2: `/health` gates on *required* probes; Mongo optional via `HEALTH_REQUIRE_MONGO=false`.
 - Insight 3: Prod failover design in `docker-compose.prod.yml` + Alertmanager; Prometheus scrapes with Bearer `METRICS_SECRET`.
@@ -30,6 +32,7 @@ Enhanced Production Readiness Audit — **Phase 0 complete** (2026-07-22). Fresh
 - Insight 24 (2026-07-22): FlowLogix API already on `:3000` with `/health` 200; compose ~45h healthy.
 
 ## Files Deeply Reviewed
+
 - Phase 0–5d surfaces; health ACL; deploy alertmanager/load/HA; board DnD; CI deploy.yml
 - `.index/module-summaries/phase5b-gap-closure.md`
 - `.index/module-summaries/phase5c-nest11.md`
@@ -39,6 +42,7 @@ Enhanced Production Readiness Audit — **Phase 0 complete** (2026-07-22). Fresh
 - Canvas: `phase5d-ha-drill.canvas.tsx`; `phase0-readiness-2026-07-22.canvas.tsx`
 
 ## Open Questions & Areas Needing Investigation
+
 - Q1: **BLOCKED on credentials / access (2026-07-20, still 2026-07-22)** — optional live prod HA / NEST deploy. No FlowLogix staging/prod API URL reachable; NEST Tailscale host has no SSH from agent; do not password-spray. Ask user for unlock + preferred remoting path.
 - Q2: (resolved) Mongo — keep + optional health gate.
 - Q3: (resolved) Nest 11 dedicated upgrade — done in Phase 5c.
@@ -48,6 +52,7 @@ Enhanced Production Readiness Audit — **Phase 0 complete** (2026-07-22). Fresh
 - Q8 (2026-07-22): User must confirm Enhanced audit scope (local vs NEST vs other), rubric weights, exclusions (SSO/tracing/RN), SLOs, Phase 1 preference.
 
 ## Decisions Made & Rationale
+
 - Decision: Remap FlowLogix Mongo to host port 27018.
   Rationale: Preserve active `chat-mongodb` on 27017.
 - Decision: Phase 0–5d campaign locked **60 → … → 100/100** on local uplift evidence.
@@ -70,25 +75,30 @@ Enhanced Production Readiness Audit — **Phase 0 complete** (2026-07-22). Fresh
   Rationale: Honest production-deploy posture; no silent overwrite of history (new dated report).
 - Decision (2026-07-22): Do not retry NEST password auth / SSH spray.
   Rationale: Prior account lockout; user instruction.
+- Decision (2026-08-01): Mirror set = AN3S-CREATE (primary) + veralogix-group-innovation + AN3S-at-CREATE; drop VeralogixCatalyst.
+  Rationale: User-directed; AGENTS.md updated as source of truth.
 
 ## Next Immediate Steps
+
 1. Await user answers to Phase 0 confirmation questions (deploy target, weights, exclusions, SLOs, NEST unlock, alert webhook, Phase 1 preference).
 2. Until confirmation: **no Phase 1–5 remediations**.
 3. Keep local compose running; leave Nest API as found if already serving `/health`.
 4. (2026-07-22 reconfirm) Baseline **86/100** re-validated unchanged — do not re-score without new evidence.
 
 ## Patterns & Recurring Issues Noticed
+
 - Pattern: npm workspaces can nest/hoist stale Nest majors after bumps — always `npm ls`, delete lock+node_modules if invalid, verify no `backend/node_modules/@nestjs`.
 - Pattern: Rules/docs converge; Atlaskit + Nest 11 + HA evidence now aligned.
 - Recurring Issue: Host RAM + co-resident containers constrain full prod compose drills.
 - Recurring Issue: Remote deploy paths (NEST / public URL) remain the largest ops gap vs local Green.
 
 ## Session Log
+
 - [2026-07-20T16:05+02:00] Daily readiness sweep. FlowLogix infra Red. Memory file created.
 - [2026-07-20T20:06+02:00] Cleanup + `.env` with MONGO 27018.
 - [2026-07-20T20:16+02:00] Part A bootstrap Green; Phase 0 audit written (60/100).
 - [2026-07-20T20:25+02:00] Phase 1 Quick Wins; `/health` ok; 106 backend tests; est. ~68–70/100.
-- [2026-07-20T20:35+02:00] Phase 1 committed `bf50683` and pushed to origin/veralogix/an3s/catalyst.
+- [2026-07-20T20:35+02:00] Phase 1 committed `bf50683` and pushed to origin/veralogix/an3s (mirror set later updated 2026-08-01).
 - [2026-07-20T20:45+02:00] Phase 2 SPA REST+JWT + needsResync refetch; 108 backend / 21 frontend tests; smoke login+move ok after seed.
 - [2026-07-20T20:55+02:00] Remotes verified at `a000402`; Phase 3 sync positionIdx + offline inserts; 116 backend / 48 mobile tests.
 - [2026-07-20T21:10+02:00] Remotes verified at `4fb971d`; Phase 4 alerts/OPS + sync→WS + delta-pull; 119 backend / 21 frontend / 48 mobile; `/health` ok; committed `a1f30c0` and pushed all remotes.
@@ -100,8 +110,10 @@ Enhanced Production Readiness Audit — **Phase 0 complete** (2026-07-22). Fresh
 - [2026-07-21T12:07+02:00] NEST deploy attempt blocked (no SSH; account lockout). Documented in memory.
 - [2026-07-22T19:05+02:00] Part A: compose already healthy; `/health` 200; tests 128/23/48 PASS; NEST still blocked (no retry). Enhanced Phase 0 written **86/100**; canvas + index refresh. Awaiting scope confirmation.
 - [2026-07-22T19:32+02:00] User re-sent Phase 0 prompt (no answers). Part A re-applied: compose ~45h healthy; `/health` 200; auth/me 401; 128/23/48 PASS; prod config OK; NEST 22/80/443 closed (8081 only). **Confirmed unchanged — 86/100 retained**; report + canvas reconfirmation stamp. **STOP** — no Phase 1.
+- [2026-08-01T15:44+02:00] Mirror remotes updated: primary AN3S-CREATE; mirrors veralogix + AN3S-at-CREATE; VeralogixCatalyst removed from AGENTS.md and index docs.
 
 ## NEST deploy attempt (2026-07-21 12:07) — still blocked 2026-07-22
+
 - Host: nest-1 Tailscale IP 100.117.250.123 (active via Tailscale).
 - Reachability: TCP 22 closed; 3389 RDP open; 5985 WinRM open; 80/443 closed; 8081 open (existing platform-api health, not FlowLogix); 6379 Redis open; 27017 Mongo open.
 - Auth: SSH unavailable. WinRM remoting blocked from agent (TrustedHosts needs local elevation; NTLM creds rejected). SMB file shares were briefly readable (andries_development, Users) without successful admin C$; later SMB became Access Denied after account lockout from failed logon attempts.

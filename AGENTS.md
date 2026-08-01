@@ -5,13 +5,17 @@ mandatory and override default agent behavior.
 
 ## Mirror every commit and push to all FlowLogix remotes
 
-FlowLogix is maintained as identical mirrors across three GitHub
-repositories. Whenever you commit or push work to **any** of them, you MUST
+FlowLogix is maintained as identical mirrors across three GitHub repositories.
+The **primary / original** repository is:
+
+- <https://github.com/AN3S-CREATE/FlowLogix.git>
+
+Whenever you commit or push work to **any** FlowLogix remote, you MUST
 individually push the same work to **all three** so they never diverge:
 
-- https://github.com/veralogix-group-innovation/FlowLogix.git
-- https://github.com/AN3S-CREATE/FlowLogix.git
-- https://github.com/VeralogixCatalyst/FlowLogix.git
+- <https://github.com/AN3S-CREATE/FlowLogix.git> *(primary / `origin`)*
+- <https://github.com/veralogix-group-innovation/FlowLogix.git> *(mirror)*
+- <https://github.com/AN3S-at-CREATE/FlowLogix.git> *(mirror)*
 
 Rules:
 
@@ -27,10 +31,13 @@ Rules:
 ### Configuring the remotes (one-time)
 
 ```sh
-git remote add veralogix https://github.com/veralogix-group-innovation/FlowLogix.git
+git remote add origin    https://github.com/AN3S-CREATE/FlowLogix.git
 git remote add an3s      https://github.com/AN3S-CREATE/FlowLogix.git
-git remote add catalyst  https://github.com/VeralogixCatalyst/FlowLogix.git
+git remote add veralogix https://github.com/veralogix-group-innovation/FlowLogix.git
+git remote add an3s-at   https://github.com/AN3S-at-CREATE/FlowLogix.git
 ```
+
+(`origin` and `an3s` may both point at the primary; that is fine.)
 
 ### Pushing every commit to all three
 
@@ -38,9 +45,12 @@ After committing on your working branch, push it to each remote individually
 (use the same branch name everywhere):
 
 ```sh
+git push origin    HEAD
 git push veralogix HEAD
-git push an3s      HEAD
-git push catalyst  HEAD
+git push an3s-at   HEAD
 ```
 
-Confirm all three pushes succeeded before considering the change done.
+If `an3s` is configured as an alias of the primary, you may use
+`git push an3s HEAD` instead of (or in addition to) `origin`.
+
+Confirm all three destinations succeeded before considering the change done.
