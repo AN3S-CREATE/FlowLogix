@@ -16,4 +16,6 @@
 | 2026-07-20 | Optional live prod HA probe | Searched deploy/env/CI/remotes; read-only DNS/TLS/HTTP probes. **Blocked** — no FlowLogix staging/prod `/health`; no confirmed replica access. No drill, no commit. |
 | 2026-07-22 | Part A + Enhanced Phase 0 | Compose already healthy (MONGO 27018); `/health` 200; 128/23/48 tests PASS; npm audit 0; NEST still blocked (no SSH retry). Fresh baseline **86/100** in `phase0-readiness-2026-07-22.md` + canvas. STOP for user scope confirmation. |
 | 2026-07-22 | Phase 0 reconfirm (same prompt, no answers) | Spot-check: git still Phase 5d era; compose ~45h healthy; `/health` 200; 128/23/48 PASS; NEST SSH closed. Score **unchanged 86/100**; reconfirmation addendum + canvas stamp. Awaiting Decision Required answers; no Phase 1. |
-| 2026-08-01 | Mirror remotes updated | Primary = AN3S-CREATE; mirrors = veralogix-group-innovation + AN3S-at-CREATE; removed VeralogixCatalyst from AGENTS.md + index docs. |
+| 2026-07-26 | Daily readiness sweep (fresh clone) | Working copy re-cloned 04:27 — no deps/`.env`/services. **P1: `npm ci` fails EBADPLATFORM**. See `REPO_ANALYSIS_MEMORY.md` Insights 22–27. |
+| 2026-08-01 | GitHub Actions stabilization | CI on push/PR/schedule/manual with root `npm ci`, split jobs, `CI Health`, `docs/ci.md`. |
+| 2026-08-01 | Mirror remotes updated | Canonical = AN3S-CREATE; mirrors = veralogix-group-innovation + AN3S-at-CREATE; VeralogixCatalyst remains retired. |

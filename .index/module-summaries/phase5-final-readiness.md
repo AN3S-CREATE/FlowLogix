@@ -11,12 +11,16 @@
 Verified before Phase 5 work. Local `HEAD` was `bfc5d41` (records Phase 4 `a1f30c0`).
 
 | Remote | URL | `a1f30c0` on `main` | `bfc5d41` on `main` |
-| -------- | ----- | --------------------- | --------------------- |
-| origin / an3s (primary) | <https://github.com/AN3S-CREATE/FlowLogix.git> | Yes (ancestor of `bfc5d41`) | Yes (= tip) |
-| veralogix (mirror) | <https://github.com/veralogix-group-innovation/FlowLogix.git> | Yes | Yes |
-| an3s-at (mirror) | <https://github.com/AN3S-at-CREATE/FlowLogix.git> | Mirror set updated 2026-08-01 — see AGENTS.md | See AGENTS.md |
+|--------|-----|---------------------|---------------------|
+| origin / an3s (canonical) | https://github.com/AN3S-CREATE/FlowLogix.git | Yes (ancestor of `bfc5d41`) | Yes (= tip) |
+| veralogix (mirror) | https://github.com/veralogix-group-innovation/FlowLogix.git | Yes | Yes |
+| an3s-at (mirror) | https://github.com/AN3S-at-CREATE/FlowLogix.git | Added 2026-08-01 — see AGENTS.md | See AGENTS.md |
 
 No catch-up push required for Phase 4.
+
+> `VeralogixCatalyst` was also verified at this date as a third mirror. It was
+> **retired 2026-07-26** and is no longer a FlowLogix mirror. See
+> `.index/key-decisions.md` and the "Retired remote" note in `AGENTS.md`.
 
 ---
 

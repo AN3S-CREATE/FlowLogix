@@ -11,8 +11,7 @@
 | 2026-07-20 | Phase 0 readiness baseline scored 60/100; no Phase 1+ until user sign-off | Mandate: discovery-only; remediations gated on scope/weights confirmation |
 | 2026-07-20 | Leave local compose running after bootstrap; stop Nest after `/health` smoke | Datastores needed for next work; Nest freed host RAM |
 | 2026-07-20 | Phase 1 = docs + HTTP filter/helmet/throttle + CI mobile; defer SPA REST & audit majors | User "Apply recommended" → Quick Wins; `--force` majors too risky |
-| 2026-07-20 | Phase 1 committed + mirrored to all three remotes (`bf50683`) | User explicitly requested commit+push |
-| 2026-08-01 | Primary = AN3S-CREATE; mirrors = veralogix-group-innovation + AN3S-at-CREATE; drop VeralogixCatalyst | User updated mirror set; AGENTS.md is source of truth |
+| 2026-07-20 | Phase 1 committed + mirrored to the then-three remotes (`bf50683`) | User explicitly requested commit+push |
 | 2026-07-20 | Phase 2 = SPA JWT/REST hydrate + needsResync refetch; server mints move keys from neighbors | P1+P5; frontend never invents `positionIdx` |
 | 2026-07-20 | SPA API mode opt-in via `VITE_API_URL` (demo seed otherwise) | Preserve offline demo without backend |
 | 2026-07-20 | Phase 3 = sync `positionIdx`/parents + offline inserts; drop invalid keys with clocks | P7; fail-closed multi-tenant; v1 content-only clients compatible |
@@ -26,3 +25,7 @@
 | 2026-07-20 | Phase 5d: award **100/100** after live dependency failover drill on local Nest 11 + compose | Evidence of 503→recover on PG/Redis/Mongo; full 3-API stack deferred for RAM |
 | 2026-07-22 | Enhanced Phase 0 baseline **86/100**; Phase 5d 100 retained as local-uplift history only | Re-weights remote deploy, alert routing, e2e, SSO/mobile shell; no password retry on NEST |
 | 2026-07-22 | STOP before Phase 1 until user confirms scope/weights/exclusions | Mandate of Enhanced audit Phase 0 |
+| 2026-07-26 | Drop `VeralogixCatalyst` as a live mirror (retired-remote note in `AGENTS.md`) | `git ls-remote` 404; owner decision |
+| 2026-08-01 | Keep one workflow file but split jobs; `CI Health` as branch-protection target | PR-safe verification without workflow sprawl |
+| 2026-08-01 | Run CI installs with root `npm ci` instead of per-workspace `npm install` | Validate committed lockfile; better caching |
+| 2026-08-01 | Canonical = AN3S-CREATE; mirrors = veralogix-group-innovation + AN3S-at-CREATE | Owner-updated three-way mirror set; AGENTS.md is source of truth |

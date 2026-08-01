@@ -14,6 +14,9 @@ Local development datastores (PostgreSQL, MongoDB, Redis) are provisioned via th
 - npm 10+
 - Docker & Docker Compose
 
+For GitHub Actions workflow details, required checks, and local CI reproduction, see
+[`docs/ci.md`](docs/ci.md).
+
 ## Getting started
 
 ### 1. Start the datastores

@@ -9,12 +9,16 @@
 ## Remote verification (Part A)
 
 | Remote | URL | `main` has `4fb971d` |
-| -------- | ----- | ---------------------- |
-| origin / an3s (primary) | <https://github.com/AN3S-CREATE/FlowLogix.git> | Yes |
-| veralogix (mirror) | <https://github.com/veralogix-group-innovation/FlowLogix.git> | Yes |
-| an3s-at (mirror) | <https://github.com/AN3S-at-CREATE/FlowLogix.git> | See current AGENTS.md (mirror set updated 2026-08-01) |
+|--------|-----|----------------------|
+| origin / an3s (canonical) | https://github.com/AN3S-CREATE/FlowLogix.git | Yes |
+| veralogix (mirror) | https://github.com/veralogix-group-innovation/FlowLogix.git | Yes |
+| an3s-at (mirror) | https://github.com/AN3S-at-CREATE/FlowLogix.git | Added 2026-08-01 — see AGENTS.md |
 
 No catch-up push required before Phase 4.
+
+> `VeralogixCatalyst` was also verified at this date as a third mirror. It was
+> **retired 2026-07-26** and is no longer a FlowLogix mirror. See
+> `.index/key-decisions.md` and the "Retired remote" note in `AGENTS.md`.
 
 ---
 
