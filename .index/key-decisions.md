@@ -23,3 +23,5 @@
 | 2026-07-20 | Phase 5c: Nest 11 via `chore/nest-11` then merge to main → **99/100** | Exact pins + root overrides; clean lockfile avoids nested Nest/rxjs |
 | 2026-07-20 | Express v5: set `query parser` to `extended` in `main.ts` | Preserve nested query parsing vs Express v5 default `simple` |
 | 2026-07-20 | Phase 5d: award **100/100** after live dependency failover drill on local Nest 11 + compose | Evidence of 503→recover on PG/Redis/Mongo; full 3-API stack deferred for RAM |
+| 2026-07-22 | Enhanced Phase 0 baseline **86/100**; Phase 5d 100 retained as local-uplift history only | Re-weights remote deploy, alert routing, e2e, SSO/mobile shell; no password retry on NEST |
+| 2026-07-22 | STOP before Phase 1 until user confirms scope/weights/exclusions | Mandate of Enhanced audit Phase 0 |

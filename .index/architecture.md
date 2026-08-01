@@ -34,7 +34,8 @@ Collaborative multi-tenant Kanban platform (NestJS API + React SPA + RN offline 
 
 ## Readiness
 
-- Phase 0 baseline: **60/100** — see `.index/module-summaries/phase0-readiness.md`.
+- **Active Enhanced baseline (2026-07-22): 86/100** — see `.index/module-summaries/phase0-readiness-2026-07-22.md` (awaiting scope confirmation before Phase 1+).
+- Phase 0 (2026-07-20): **60/100** — see `.index/module-summaries/phase0-readiness.md`.
 - Phase 1 Quick Wins: **~68–70/100** (est.) — see `.index/module-summaries/phase1-quick-wins.md`.
 - Phase 2 Core Hardening: **~76–80/100** (est.) — see `.index/module-summaries/phase2-core-hardening.md`.
 - Phase 3 Specialized uplift: **~84–88/100** (est.) — sync `positionIdx` + offline inserts; see `phase3-specialized-uplift.md`.
@@ -42,7 +43,7 @@ Collaborative multi-tenant Kanban platform (NestJS API + React SPA + RN offline 
 - Phase 5 Final validation: **92/100** — see `phase5-final-readiness.md`.
 - Phase 5b Gap closure: **97/100** — see `phase5b-gap-closure.md`.
 - Phase 5c Nest 11: **99/100** — see `phase5c-nest11.md`.
-- Phase 5d HA drill: **100/100** — see `phase5d-ha-drill.md` + `deploy/HA-TABLETOP.md`.
+- Phase 5d HA drill (local uplift claim): **100/100** — see `phase5d-ha-drill.md` + `deploy/HA-TABLETOP.md`.
 
 ## Frontend API mode (Phase 2)
 

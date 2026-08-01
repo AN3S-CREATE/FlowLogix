@@ -27,7 +27,8 @@
 | `.github/workflows/deploy.yml` | CI verify + compose health e2e (workflow_dispatch) + GHCR push | Active |
 | `REPO_ANALYSIS_MEMORY.md` | Cross-session agent memory | Active |
 | `.index/` | Agent context index | Active |
-| `.index/module-summaries/phase0-readiness.md` | Phase 0 readiness audit deliverable (60/100) | Active |
+| `.index/module-summaries/phase0-readiness.md` | Phase 0 readiness audit deliverable (60/100, 2026-07-20) | Active |
+| `.index/module-summaries/phase0-readiness-2026-07-22.md` | Enhanced Phase 0 baseline (**86/100**); supersedes 100 as active score | Active |
 | `.index/module-summaries/phase1-quick-wins.md` | Phase 1 Quick Wins deliverable (~68–70/100 est.) | Active |
 | `.index/module-summaries/phase2-core-hardening.md` | Phase 2 SPA REST+JWT + resync refetch (~76–80/100 est.) | Active |
 | `.index/module-summaries/phase3-specialized-uplift.md` | Phase 3 sync positionIdx + offline inserts (~84–88/100 est.) | Active |
