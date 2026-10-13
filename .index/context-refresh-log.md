@@ -20,3 +20,4 @@
 | 2026-08-01 | GitHub Actions stabilization | CI on push/PR/schedule/manual with root `npm ci`, split jobs, `CI Health`, `docs/ci.md`. |
 | 2026-08-01 | Mirror remotes updated | Canonical = AN3S-CREATE; mirrors = veralogix-group-innovation + AN3S-at-CREATE; VeralogixCatalyst remains retired. |
 | 2026-10-13 | Branch consolidation | Reviewed canonical branches; merged the lockfile-only `jules-health-checks` branch into the main-based work branch. `npm ci --ignore-scripts --dry-run` passed. |
+| 2026-10-13 | Mirror policy revised at owner request | Retired veralogix-group-innovation after its endpoint returned `Repository not found`; canonical = AN3S-CREATE, sole mirror = AN3S-at-CREATE. |

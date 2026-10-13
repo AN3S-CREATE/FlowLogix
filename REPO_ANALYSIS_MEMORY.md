@@ -1,9 +1,11 @@
 # Repository Analysis State — FlowLogix / LogixFlow
 
 ## Current Analysis Phase & Progress
-Phase 7 — **Branch consolidation** (2026-10-13). All discovered canonical and local branch tips are
-included in the consolidated `main` tip (`f5681d0`); it is pushed to AN3S-CREATE and AN3S-at-CREATE.
-The required veralogix-group-innovation push is blocked because GitHub returns "Repository not found".
+Operations — **mirror policy revision** (2026-10-13). Owner requested retiring
+`veralogix-group-innovation/FlowLogix` after pushes returned `Repository not found`.
+Active destinations are canonical `AN3S-CREATE/FlowLogix` and mirror
+`AN3S-at-CREATE/FlowLogix`. Branch consolidation is on `main`; optional live **prod** HA remains
+blocked on credentials.
 
 ## Key Architectural Insights Discovered
 - Insight 1: Local datastores via `docker-compose.yml` (Postgres 5432, Mongo 27018 remapped, Redis 6379); all three healthy after bootstrap.
@@ -42,11 +44,13 @@ The required veralogix-group-innovation push is blocked because GitHub returns "
   per-workspace `npm install` (`working-directory: backend|frontend|mobile`) and **never** runs
   root `npm ci` — so the committed lockfile is never exercised and its pins are not enforced.
   Green CI ≠ reproducible clean clone.
-- Insight 24 (**2026-07-26**, *resolved*; *updated 2026-08-01*): Mirror policy (AGENTS.md) was
+- Insight 24 (**2026-07-26**, *resolved*; *updated 2026-08-01 and 2026-10-13*):
+  Mirror policy (AGENTS.md) was
   **broken** — `veralogix` behind, `catalyst` **"Repository not found"**. Owner dropped catalyst.
-  **Current policy (2026-08-01):** canonical `AN3S-CREATE` + mirrors `veralogix-group-innovation`
-  and `AN3S-at-CREATE`. `AGENTS.md` keeps a "Retired remote — do not re-add" note for
-  VeralogixCatalyst.
+  **Current policy (2026-10-13):** canonical `AN3S-CREATE` + sole mirror `AN3S-at-CREATE`.
+  Owner removed `veralogix-group-innovation` from the policy after its push returned
+  "Repository not found"; whether deleted or inaccessible is unknown. `AGENTS.md` documents
+  both retired mirrors; do not re-add unless the owner explicitly asks.
 - Insight 25 (**2026-07-26**): No backup capability exists. No `pg_dump`, no backup/restore script,
   no tested restore, no RPO/RTO. `deploy/OPS.md:65` defers it ("take volume snapshots / managed DB").
 - Insight 26 (**2026-07-26**): The Mongo 27018 host remap (Insight 4) lived **only** in the
@@ -110,10 +114,15 @@ The required veralogix-group-innovation push is blocked because GitHub returns "
   Rationale: Forces lockfile validation and improves reproducibility/caching.
 
 ## Next Immediate Steps
-1. Restore or verify access to `veralogix-group-innovation/FlowLogix`, then retry pushing the
-   consolidated `main` tip; GitHub currently returns "Repository not found".
-2. After mirror sync is complete, return to existing project priorities: CI remote validation,
-   host capacity, backup/restore procedure, Mongo port template, and Node pinning.
+1. For future mirror synchronization, use only the two active destinations documented in `AGENTS.md`.
+2. **P2 — host capacity.** C: at 2.8% free (25.7 GB) is causing VSS/shadow-copy failures and a
+   failed Windows 11 25H2 install (0x800703EE). Free space before starting Docker Desktop.
+3. **P2 — backup.** Author a `pg_dump` + restore procedure with a stated RPO/RTO; add a restore drill
+   to the OPS cadence (Insight 25).
+4. **P3 — document the Mongo remap.** Set/annotate `MONGO_PORT=27018` in `.env.example` (Insight 26).
+5. **P3 — pin Node.** Add `engines.node` matching CI's Node 20; local host runs non-LTS v25.2.1.
+6. Await user decision for optional live prod HA: API base URL + replica access + api2-stop
+   permission + maintenance window.
 
 ## Patterns & Recurring Issues Noticed
 - Pattern: npm workspaces can nest/hoist stale Nest majors after bumps — always `npm ls`, delete lock+node_modules if invalid, verify no `backend/node_modules/@nestjs`.
@@ -156,3 +165,6 @@ The required veralogix-group-innovation push is blocked because GitHub returns "
   `npm ci --ignore-scripts --dry-run --no-audit --no-fund` passed. Final consolidated tip
   `f5681d0` is main on AN3S-CREATE and AN3S-at-CREATE, with all discovered branch tips as ancestors.
   Branch and main pushes to `veralogix-group-innovation` failed because GitHub returns 404.
+- [2026-10-13T18:07+02:00] Owner explicitly requested removing `veralogix-group-innovation` as a mirror.
+  Updated `AGENTS.md` to make AN3S-at-CREATE the sole mirror; retained the old endpoint as a retired
+  mirror without asserting whether it is deleted or merely inaccessible. Updated `.index/`.

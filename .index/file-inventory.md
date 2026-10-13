@@ -12,6 +12,7 @@
 | `.env.prod.example` | Prod secrets template (+ METRICS_SECRET, HEALTH_REQUIRE_MONGO) | Active |
 | `.cursorrules` | AI coding / brand / architecture rules | Active |
 | `CLAUDE.md` | Implementation status vs rules | Active |
+| `AGENTS.md` | Operational agent rules and canonical/mirror push policy | Active |
 | `README.md` | Getting started + ops pointer | Active |
 | `backend/src/health/` | Health + Prometheus metrics + metrics ACL + optional mongo gate | Active |
 | `backend/src/auth/` | JWT auth module + global guard | Active |
@@ -29,6 +30,8 @@
 | `docs/ci.md` | CI workflow guide: required checks, local reproduction, reruns, troubleshooting | Active |
 | `REPO_ANALYSIS_MEMORY.md` | Cross-session agent memory | Active |
 | `.index/` | Agent context index | Active |
+| `.index/key-decisions.md` | Dated project and operations decisions | Active |
+| `.index/context-refresh-log.md` | Index refresh history | Active |
 | `.index/module-summaries/phase0-readiness.md` | Phase 0 readiness audit deliverable (60/100, 2026-07-20) | Active |
 | `.index/module-summaries/phase0-readiness-2026-07-22.md` | Enhanced Phase 0 baseline (**86/100**); supersedes 100 as active score | Active |
 | `.index/module-summaries/phase1-quick-wins.md` | Phase 1 Quick Wins deliverable (~68–70/100 est.) | Active |
