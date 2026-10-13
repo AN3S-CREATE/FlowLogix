@@ -19,3 +19,4 @@
 | 2026-07-26 | Daily readiness sweep (fresh clone) | Working copy re-cloned 04:27 — no deps/`.env`/services. **P1: `npm ci` fails EBADPLATFORM**. See `REPO_ANALYSIS_MEMORY.md` Insights 22–27. |
 | 2026-08-01 | GitHub Actions stabilization | CI on push/PR/schedule/manual with root `npm ci`, split jobs, `CI Health`, `docs/ci.md`. |
 | 2026-08-01 | Mirror remotes updated | Canonical = AN3S-CREATE; mirrors = veralogix-group-innovation + AN3S-at-CREATE; VeralogixCatalyst remains retired. |
+| 2026-10-13 | Branch consolidation | Reviewed canonical branches; merged the lockfile-only `jules-health-checks` branch into the main-based work branch. `npm ci --ignore-scripts --dry-run` passed. |

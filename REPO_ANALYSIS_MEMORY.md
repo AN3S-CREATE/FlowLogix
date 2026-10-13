@@ -1,9 +1,9 @@
 # Repository Analysis State — FlowLogix / LogixFlow
 
 ## Current Analysis Phase & Progress
-Phase 6 — **GitHub Actions stabilization + mirror sync** (2026-08-01). Merged local docs with
-`origin/main`; AGENTS.md canonical three-remote set restored. Optional live **prod** HA still
-blocked on credentials.
+Phase 7 — **Branch consolidation** (2026-10-13). Merged canonical `jules-health-checks` lockfile
+branch into the main-based work branch; npm lockfile dry-run passed. Push to all three destinations
+is pending; `veralogix-group-innovation` currently returns "Repository not found".
 
 ## Key Architectural Insights Discovered
 - Insight 1: Local datastores via `docker-compose.yml` (Postgres 5432, Mongo 27018 remapped, Redis 6379); all three healthy after bootstrap.
@@ -110,21 +110,12 @@ blocked on credentials.
   Rationale: Forces lockfile validation and improves reproducibility/caching.
 
 ## Next Immediate Steps
-1. **P1 — remote validation.** Commit/push the CI changes, then confirm new `CI & Publish` runs are
-   green on push and on a PR-equivalent branch.
-2. **P1 — unblock provisioning.** Re-check whether Insight 22 still reproduces against the current
-   lockfile on a fresh clone; if it does, apply the proven `esbuild` dedupe fix in the repo.
-3. ~~**P1 — restore the mirror invariant.**~~ **Done.** Catalyst retired; current three-way set is
-   canonical `AN3S-CREATE` + mirrors `veralogix` + `AN3S-at-CREATE` (see `AGENTS.md`). Verify with
-   `git ls-remote` on all three before calling any future push complete.
-4. **P2 — host capacity.** C: at 2.8% free (25.7 GB) is causing VSS/shadow-copy failures and a
-   failed Windows 11 25H2 install (0x800703EE). Free space before starting Docker Desktop.
-5. **P2 — backup.** Author a `pg_dump` + restore procedure with a stated RPO/RTO; add a restore drill
-   to the OPS cadence (Insight 25).
-6. **P3 — document the Mongo remap.** Set/annotate `MONGO_PORT=27018` in `.env.example` (Insight 26).
-7. **P3 — pin Node.** Add `engines.node` matching CI's Node 20; local host runs non-LTS v25.2.1.
-8. Await user decision for optional live prod HA: API base URL + replica access + api2-stop
-   permission + maintenance window.
+1. Push the consolidated tip to `AN3S-at-CREATE/FlowLogix` and `AN3S-CREATE/FlowLogix`, then
+   verify their `main` tips.
+2. Retry the third required destination, `veralogix-group-innovation/FlowLogix`; stop if it remains
+   unavailable and report the mirror-push failure.
+3. After branch consolidation is complete, return to existing project priorities: CI remote
+   validation, host capacity, backup/restore procedure, Mongo port template, and Node pinning.
 
 ## Patterns & Recurring Issues Noticed
 - Pattern: npm workspaces can nest/hoist stale Nest majors after bumps — always `npm ls`, delete lock+node_modules if invalid, verify no `backend/node_modules/@nestjs`.
@@ -160,3 +151,9 @@ blocked on credentials.
 - [2026-08-01T16:10+02:00] Merged origin/main into local; restored canonical three-remote AGENTS.md
   (AN3S-CREATE + veralogix + AN3S-at-CREATE); VeralogixCatalyst remains retired. Committing,
   pushing all mirrors, merging/deleting leftover `chore/nest-11` branches.
+- [2026-10-13T17:40+02:00] User requested committing, pushing, and merging branches to main.
+  Starting tree was clean; canonical `copilot/main-mirror-repositories` and local branches already
+  equaled main. Merged canonical `jules-health-checks-8466460691281574361` (only extraneous
+  `package-lock.json` entries); `npm ci --ignore-scripts --dry-run --no-audit --no-fund` passed.
+  Pushes pending; AN3S-CREATE and AN3S-at-CREATE refs were reachable, while
+  veralogix-group-innovation returned 404.

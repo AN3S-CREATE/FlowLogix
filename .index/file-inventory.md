@@ -3,6 +3,7 @@
 | Path | Purpose | Status |
 |------|---------|--------|
 | `package.json` | npm workspaces root (backend/frontend/mobile) | Active |
+| `package-lock.json` | npm v3 lockfile for the root workspaces | Active |
 | `docker-compose.yml` | Local Postgres/Mongo/Redis | Active |
 | `docker-compose.prod.yml` | Production multi-replica stack (+ Alertmanager, metrics bearer config) | Active |
 | `.env.example` | Local compose env template | Active |
