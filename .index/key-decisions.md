@@ -28,4 +28,5 @@
 | 2026-07-26 | Drop `VeralogixCatalyst` as a live mirror (retired-remote note in `AGENTS.md`) | `git ls-remote` 404; owner decision |
 | 2026-08-01 | Keep one workflow file but split jobs; `CI Health` as branch-protection target | PR-safe verification without workflow sprawl |
 | 2026-08-01 | Run CI installs with root `npm ci` instead of per-workspace `npm install` | Validate committed lockfile; better caching |
-| 2026-08-01 | Canonical = AN3S-CREATE; mirrors = veralogix-group-innovation + AN3S-at-CREATE | Owner-updated three-way mirror set; AGENTS.md is source of truth |
+| 2026-08-01 | Canonical = AN3S-CREATE; mirrors = veralogix-group-innovation + AN3S-at-CREATE (historical; superseded 2026-10-13) | Owner-updated mirror set at that time; AGENTS.md is source of truth |
+| 2026-10-13 | Canonical = AN3S-CREATE; sole mirror = AN3S-at-CREATE; retire veralogix-group-innovation | Owner requested removal after pushes returned `Repository not found`; inaccessible vs deleted status is unknown |
